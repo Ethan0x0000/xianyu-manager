@@ -5392,6 +5392,73 @@ class XianyuSliderStealth:
                 )
                 return slider_container, slider_button, None
 
+            # 🔑 2026-04-04 跨frame修复：验证button和track尺寸比例是否合理
+            # 真正的滑块按钮宽度通常在30-60px，轨道在300-400px
+            # 如果按钮宽度 >= 轨道宽度的50%，说明匹配到了错误的元素（如generic [class*='btn']）
+            if slider_button and slider_track:
+                try:
+                    _btn_box = slider_button.bounding_box()
+                    _trk_box = slider_track.bounding_box()
+                    if (
+                        _btn_box
+                        and _trk_box
+                        and _trk_box["width"] > 0
+                        and _btn_box["width"] >= _trk_box["width"] * 0.5
+                    ):
+                        logger.warning(
+                            f"【{self.pure_user_id}】⚠️ 滑块按钮宽度异常: {_btn_box['width']:.1f}px "
+                            f">= 轨道宽度50% ({_trk_box['width']:.1f}px)，"
+                            f"疑似匹配到错误元素，尝试重新查找正确的滑块按钮..."
+                        )
+                        _nc_selectors = ["#nc_1_n1z", ".nc_iconfont", ".btn_slide"]
+                        _new_button = None
+
+                        # 收集待搜索的frames（优先在found_frame中查找，再搜索所有frame）
+                        _search_frames = []
+                        if found_frame and found_frame != self.page:
+                            _search_frames.append(found_frame)
+                        try:
+                            for _f in self.page.frames:
+                                if (
+                                    _f not in _search_frames
+                                    and _f != self.page.main_frame
+                                ):
+                                    _search_frames.append(_f)
+                        except:
+                            pass
+
+                        for _sf in _search_frames:
+                            if _new_button:
+                                break
+                            for _sel in _nc_selectors:
+                                try:
+                                    _el = _sf.query_selector(_sel)
+                                    if _el:
+                                        try:
+                                            if _el.is_visible():
+                                                _new_button = _el
+                                                logger.info(
+                                                    f"【{self.pure_user_id}】✅ 重新找到正确的滑块按钮: {_sel}"
+                                                )
+                                                break
+                                        except:
+                                            _new_button = _el
+                                            break
+                                except:
+                                    continue
+
+                        if _new_button:
+                            slider_button = _new_button
+                        else:
+                            logger.warning(
+                                f"【{self.pure_user_id}】⚠️ 未能找到正确的滑块按钮，"
+                                f"将返回当前元素（距离计算可能异常）"
+                            )
+                except Exception as _validate_e:
+                    logger.debug(
+                        f"【{self.pure_user_id}】验证滑块元素时出错: {_validate_e}"
+                    )
+
             # 保存找到滑块的frame引用，供后续验证使用
             if found_frame and found_frame != self.page:
                 self._detected_slider_frame = found_frame
@@ -5487,12 +5554,34 @@ class XianyuSliderStealth:
                 logger.error(f"【{self.pure_user_id}】无法获取滑块轨道位置")
                 return 0
 
+            # 🔑 2026-04-04 健全性检查：验证按钮和轨道尺寸比例
+            # 真正的滑块按钮宽度通常在30-60px，轨道宽度在300-400px
+            # 如果按钮宽度接近或超过轨道宽度的50%，说明匹配到了错误的元素
+            if (
+                track_box["width"] > 0
+                and button_box["width"] >= track_box["width"] * 0.5
+            ):
+                logger.error(
+                    f"【{self.pure_user_id}】⚠️ 滑块尺寸异常: 按钮宽度={button_box['width']:.1f}px, "
+                    f"轨道宽度={track_box['width']:.1f}px, 按钮宽度>=轨道50%，"
+                    f"可能匹配到错误元素（需要重新查找滑块）"
+                )
+                return -1
+
             # 🎨 检测是否为刮刮乐类型
             is_scratch = self.is_scratch_captcha()
 
             # 🔑 关键优化1：使用JavaScript获取更精确的尺寸（避免DPI缩放影响）
+            # 🔑 2026-04-04 修复：优先在检测到的滑块frame中执行JS，避免跨iframe查询失败
             try:
-                precise_distance = self.page.evaluate("""
+                _eval_target = self.page
+                if (
+                    hasattr(self, "_detected_slider_frame")
+                    and self._detected_slider_frame is not None
+                ):
+                    _eval_target = self._detected_slider_frame
+
+                precise_distance = _eval_target.evaluate("""
                     () => {
                         const button = document.querySelector('#nc_1_n1z') || document.querySelector('.nc_iconfont');
                         const track = document.querySelector('#nc_1_n1t') || document.querySelector('.nc_scale');
@@ -6259,7 +6348,13 @@ class XianyuSliderStealth:
                     slider_button, slider_track
                 )
                 if slide_distance <= 0:
-                    logger.error(f"【{self.pure_user_id}】滑动距离计算失败")
+                    logger.error(
+                        f"【{self.pure_user_id}】滑动距离计算失败 (distance={slide_distance})，"
+                        f"可能匹配到错误的滑块元素，清除缓存后重试"
+                    )
+                    # 清除缓存的frame引用，下次重试时重新全局搜索
+                    if hasattr(self, "_detected_slider_frame"):
+                        delattr(self, "_detected_slider_frame")
                     continue
 
                 # 3. 生成人类化轨迹（传递尝试次数以增加随机扰动）
