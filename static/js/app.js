@@ -10577,7 +10577,11 @@ function startRefreshCookiePolling(sessionId, cookieId) {
                     // 需要人脸认证，显示验证截图或链接
                     updateRefreshCookieStatus('需要人脸验证，请查看弹出的验证窗口');
                     // 使用账号密码登录的验证显示函数
-                    showPasswordLoginQRCode(data.screenshot_path || data.verification_url || data.qr_code_url, data.screenshot_path);
+                    showPasswordLoginQRCode(
+                        data.screenshot_path || data.verification_url || data.qr_code_url,
+                        data.screenshot_path,
+                        data
+                    );
                     break;
                 case 'success':
                     stopRefreshCookiePolling(sessionId);
@@ -10724,7 +10728,11 @@ async function checkPasswordLoginStatus() {
                     break;
                 case 'verification_required':
                     // 需要人脸认证，显示验证截图或链接
-                    showPasswordLoginQRCode(data.screenshot_path || data.verification_url || data.qr_code_url, data.screenshot_path);
+                    showPasswordLoginQRCode(
+                        data.screenshot_path || data.verification_url || data.qr_code_url,
+                        data.screenshot_path,
+                        data
+                    );
                     // 继续监控（人脸认证后需要继续等待登录完成）
                     break;
                 case 'success':
@@ -10782,7 +10790,7 @@ async function checkPasswordLoginStatus() {
 }
 
 // 显示账号密码登录验证（人脸认证）
-function showPasswordLoginQRCode(verificationUrl, screenshotPath) {
+function showPasswordLoginQRCode(verificationUrl, screenshotPath, verificationData = {}) {
     // 使用现有的二维码登录模态框
     let modal = document.getElementById('passwordLoginQRModal');
     if (!modal) {
@@ -10814,6 +10822,11 @@ function showPasswordLoginQRCode(verificationUrl, screenshotPath) {
     const screenshotImg = document.getElementById('passwordLoginScreenshotImg');
     const linkButton = document.getElementById('passwordLoginVerificationLink');
     const statusText = document.getElementById('passwordLoginQRStatusText');
+    const verificationType = verificationData.verification_type || 'unknown';
+    const verificationMessage = verificationData.verification_message || '';
+    const defaultStatusText = verificationType === 'qr_verify'
+        ? '需要闲鱼扫码验证，请使用手机闲鱼APP扫描下方二维码并完成人脸校验'
+        : '需要闲鱼人脸验证，请使用手机闲鱼APP完成验证';
     
     if (screenshotPath) {
         // 显示截图
@@ -10829,7 +10842,7 @@ function showPasswordLoginQRCode(verificationUrl, screenshotPath) {
         
         // 更新状态文本
         if (statusText) {
-            statusText.textContent = '需要闲鱼人脸验证，请使用手机闲鱼APP扫描下方二维码完成验证';
+            statusText.textContent = verificationMessage || defaultStatusText;
         }
     } else if (verificationUrl) {
         // 隐藏截图
@@ -10845,7 +10858,7 @@ function showPasswordLoginQRCode(verificationUrl, screenshotPath) {
         
         // 更新状态文本
         if (statusText) {
-            statusText.textContent = '服务端已保持原始会话；如二维码暂未显示，可使用下方兜底入口';
+            statusText.textContent = verificationMessage || '服务端已保持原始会话；如二维码暂未显示，可使用下方兜底入口';
         }
     } else {
         // 都没有，显示等待
@@ -10856,7 +10869,7 @@ function showPasswordLoginQRCode(verificationUrl, screenshotPath) {
             linkButton.style.display = 'none';
         }
         if (statusText) {
-            statusText.textContent = '需要闲鱼验证，请等待验证信息...';
+            statusText.textContent = verificationMessage || '需要闲鱼验证，请等待验证信息...';
         }
     }
 }

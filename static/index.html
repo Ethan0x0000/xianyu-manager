@@ -489,7 +489,7 @@
             <div id="passwordLoginForm" style="display: none;">
               <div class="alert alert-info">
                 <i class="bi bi-info-circle me-2"></i>
-                <strong>提示：</strong>使用账号密码登录，系统将自动获取Cookie。登录过程可能需要处理滑块验证，请耐心等待。
+                <strong>提示：</strong>使用账号密码登录，系统将自动获取Cookie。无头模式下如触发闲鱼扫码/人脸验证，当前页面会展示二维码并在验证完成后自动继续获取Cookie。
               </div>
               <form id="passwordLoginFormElement" class="row g-3">
                 <div class="col-md-4">
@@ -508,7 +508,7 @@
                   <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="passwordLoginShowBrowser" value="1">
                     <label class="form-check-label" for="passwordLoginShowBrowser">
-                      显示浏览器窗口（如果使用服务器，请勿打开该开关，会导致登录失败）
+                      显示浏览器窗口（如果关闭，将使用无头模式，并在当前页面展示闲鱼验证二维码）
                     </label>
                   </div>
                 </div>

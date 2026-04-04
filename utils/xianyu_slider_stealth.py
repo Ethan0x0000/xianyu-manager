@@ -884,6 +884,7 @@ class XianyuSliderStealth:
         )
         self.last_verification_feedback = {}
         self.last_login_error = ""
+        self.preserve_verification_artifacts = False
         self._slider_refresh_mode = False
         self.risk_session_id = None
         self.risk_trigger_scene = None
@@ -2376,6 +2377,37 @@ class XianyuSliderStealth:
         except Exception:
             return ""
 
+    def _record_verification_artifacts(
+        self,
+        context,
+        page,
+        verification_type: str,
+        verify_url: Optional[str] = None,
+        screenshot_path: Optional[str] = None,
+        source_frame=None,
+    ):
+        """记录当前身份验证页面的最小证据集，便于后续判断是否为平台二次风控。"""
+        try:
+            cookie_dict = self._snapshot_context_cookies(context)
+            page_url = verify_url or self._safe_page_url(page)
+            page_title = self._safe_page_title(page)
+            page_text = self._read_frame_text_for_detection(source_frame or page)
+            self.last_verification_feedback = {
+                "status": "verification_required",
+                "verification_type": verification_type or "unknown",
+                "verification_url": page_url,
+                "page_title": page_title,
+                "page_text_preview": page_text[:500],
+                "screenshot_path": screenshot_path,
+                "cookie_count": len(cookie_dict),
+                "cookie_keys": sorted(cookie_dict.keys())[:20],
+                "has_completed_login_cookies": self._has_completed_login_cookies(
+                    cookie_dict
+                ),
+            }
+        except Exception as e:
+            logger.warning(f"【{self.pure_user_id}】记录验证证据失败: {e}")
+
     def _get_context_pages(self, context=None, fallback_page=None) -> List[Any]:
         pages = []
         seen = set()
@@ -2875,6 +2907,15 @@ class XianyuSliderStealth:
         logger.warning(f"【{self.pure_user_id}】⚠️ 检测到{type_name}")
         logger.info(f"【{self.pure_user_id}】请在浏览器中完成{type_name}")
 
+        self._record_verification_artifacts(
+            context,
+            fallback_page,
+            verification_type=verification_type,
+            verify_url=frame_url,
+            screenshot_path=screenshot_path,
+            source_frame=qr_frame,
+        )
+
         if screenshot_path:
             logger.warning(f"【{self.pure_user_id}】{'=' * 60}")
             logger.warning(f"【{self.pure_user_id}】二维码/人脸验证截图:")
@@ -2901,18 +2942,34 @@ class XianyuSliderStealth:
             notification_scene,
         )
 
+        max_wait_time = 450
+        try:
+            max_wait_time = max(
+                30, int(os.environ.get("XY_VERIFY_WAIT_SECONDS", "450"))
+            )
+        except Exception:
+            max_wait_time = 450
+
         logger.info(f"【{self.pure_user_id}】等待二维码/人脸验证完成...")
         login_success = False
         try:
             login_success, _ = self._wait_for_context_login(
-                context, fallback_page, max_wait_time=450, check_interval=10
+                context,
+                fallback_page,
+                max_wait_time=max_wait_time,
+                check_interval=10,
             )
         finally:
-            self._cleanup_verification_screenshots()
+            preserve_artifacts = (
+                self.preserve_verification_artifacts
+                or os.environ.get("XY_PRESERVE_VERIFY_SCREENSHOT", "0") == "1"
+            )
+            if not preserve_artifacts:
+                self._cleanup_verification_screenshots()
 
         if not login_success:
-            logger.error(f"【{self.pure_user_id}】❌ 等待验证超时（450秒）")
-            return self._fail_login(f"等待{type_name}超时（450秒）")
+            logger.error(f"【{self.pure_user_id}】❌ 等待验证超时（{max_wait_time}秒）")
+            return self._fail_login(f"等待{type_name}超时（{max_wait_time}秒）")
 
         logger.success(f"【{self.pure_user_id}】✅ 验证成功，登录状态已确认！")
         cookies_dict = self._snapshot_context_cookies(context)
@@ -3516,13 +3573,33 @@ class XianyuSliderStealth:
             Object.defineProperty(navigator, 'productSub', {{ get: () => '20030107' }});
             Object.defineProperty(navigator, 'userAgent', {{ get: () => '{browser_features["user_agent"]}' }});
             
+            const createEventTargetShim = (target) => {{
+                if (!target || typeof target !== 'object') return target;
+                if (typeof target.addEventListener !== 'function') {{
+                    Object.defineProperty(target, 'addEventListener', {{ value: () => {{}}, configurable: true }});
+                }}
+                if (typeof target.removeEventListener !== 'function') {{
+                    Object.defineProperty(target, 'removeEventListener', {{ value: () => {{}}, configurable: true }});
+                }}
+                if (typeof target.dispatchEvent !== 'function') {{
+                    Object.defineProperty(target, 'dispatchEvent', {{ value: () => false, configurable: true }});
+                }}
+                if (!('onchange' in target)) {{
+                    Object.defineProperty(target, 'onchange', {{ value: null, writable: true, configurable: true }});
+                }}
+                return target;
+            }};
+
             // 连接信息
+            const fakeConnection = createEventTargetShim({{
+                effectiveType: "{browser_features["connection_type"]}",
+                rtt: {browser_features["connection_rtt"]},
+                downlink: {browser_features["connection_downlink"]},
+                saveData: false,
+                type: 'wifi'
+            }});
             Object.defineProperty(navigator, 'connection', {{
-                get: () => ({{
-                    effectiveType: "{browser_features["connection_type"]}",
-                    rtt: {browser_features["connection_rtt"]},
-                    downlink: {browser_features["connection_downlink"]}
-                }})
+                get: () => fakeConnection
             }});
             
             // headless 隐藏
@@ -3591,13 +3668,27 @@ class XianyuSliderStealth:
             }};
             
             // === 电池 API ===
+            const patchBatteryObject = (battery) => {{
+                const patchedBattery = createEventTargetShim(battery || {{}});
+                Object.defineProperty(patchedBattery, 'charging', {{ get: () => {str(browser_features["battery_charging"]).lower()}, configurable: true }});
+                Object.defineProperty(patchedBattery, 'level', {{ get: () => {browser_features["battery_level"]:.2f}, configurable: true }});
+                if (!('chargingTime' in patchedBattery)) {{
+                    Object.defineProperty(patchedBattery, 'chargingTime', {{ get: () => 0, configurable: true }});
+                }}
+                if (!('dischargingTime' in patchedBattery)) {{
+                    Object.defineProperty(patchedBattery, 'dischargingTime', {{ get: () => Infinity, configurable: true }});
+                }}
+                return patchedBattery;
+            }};
             if (navigator.getBattery) {{
                 const originalGetBattery = navigator.getBattery;
                 navigator.getBattery = async function() {{
                     const battery = await originalGetBattery.call(navigator);
-                    Object.defineProperty(battery, 'charging', {{ get: () => {str(browser_features["battery_charging"]).lower()} }});
-                    Object.defineProperty(battery, 'level', {{ get: () => {browser_features["battery_level"]:.2f} }});
-                    return battery;
+                    return patchBatteryObject(battery);
+                }};
+            }} else {{
+                navigator.getBattery = async function() {{
+                    return patchBatteryObject();
                 }};
             }}
             
@@ -3605,7 +3696,7 @@ class XianyuSliderStealth:
             const originalQuery = Permissions.prototype.query;
             Permissions.prototype.query = function(parameters) {{
                 if (parameters.name === 'notifications') {{
-                    return Promise.resolve({{ state: '{browser_features["notification_permission"]}' }});
+                    return Promise.resolve(createEventTargetShim({{ state: '{browser_features["notification_permission"]}' }}));
                 }}
                 return originalQuery.apply(this, arguments);
             }};
@@ -6806,20 +6897,28 @@ class XianyuSliderStealth:
             except:
                 pass
 
-            if "sms" in frame_url.lower() or "phone" in frame_url.lower():
+            frame_url_lower = frame_url.lower()
+
+            if "identity_verify" in frame_url_lower or "/iv/mini/" in frame_url_lower:
+                logger.info(
+                    f"【{self.pure_user_id}】检测到通用身份验证页(URL特征): {frame_url}"
+                )
+                return "unknown"
+
+            if "sms" in frame_url_lower or "phone" in frame_url_lower:
                 logger.info(
                     f"【{self.pure_user_id}】检测到验证类型: 短信验证 (URL特征)"
                 )
                 return "sms_verify"
 
-            if "qrcode" in frame_url.lower() or "scan" in frame_url.lower():
+            if "qrcode" in frame_url_lower or "scan" in frame_url_lower:
                 logger.info(
                     f"【{self.pure_user_id}】检测到验证类型: 二维码验证 (URL特征)"
                 )
                 return "qr_verify"
 
             if any(
-                token in frame_url.lower()
+                token in frame_url_lower
                 for token in ("face_verify", "faceverify", "liveness")
             ):
                 logger.info(
@@ -7641,21 +7740,30 @@ class XianyuSliderStealth:
             playwright = sync_playwright().start()
             browser = None
 
-            # 🔧 2026-04-04: 更新 Chrome UA 版本（118-120 太旧会被风控标记）
-            # 注意：必须使用 Windows UA，与 Docker/Linux 的 persistent context 历史数据兼容
-            _pw_login_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+            # 为账号加载稳定浏览器画像（与 init_browser 复用同一套身份，避免同账号多设备漂移）
+            browser_features = self._get_random_browser_features()
+            _pw_login_ua = browser_features["user_agent"]
+            logger.info(
+                f"【{self.pure_user_id}】密码登录使用画像: {browser_features.get('profile_id', 'unknown')}, "
+                f"UA: {_pw_login_ua[:60]}..."
+            )
 
             if force_clean_context:
                 browser = playwright.chromium.launch(
                     headless=not show_browser, args=browser_args
                 )
                 context = browser.new_context(
-                    viewport={"width": 1920, "height": 1080},
+                    viewport={
+                        "width": browser_features["viewport_width"],
+                        "height": browser_features["viewport_height"],
+                    },
                     user_agent=_pw_login_ua,
-                    locale="zh-CN",
+                    locale=browser_features["locale"],
                     accept_downloads=True,
                     ignore_https_errors=True,
-                    extra_http_headers={"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"},
+                    extra_http_headers={
+                        "Accept-Language": browser_features["accept_lang"]
+                    },
                 )
                 # 注入已有 Cookie（让浏览器不是全新空白状态，降低风控检测风险）
                 try:
@@ -7720,29 +7828,32 @@ class XianyuSliderStealth:
                     user_data_dir,
                     headless=not show_browser,
                     args=browser_args,
-                    viewport={"width": 1920, "height": 1080},
+                    viewport={
+                        "width": browser_features["viewport_width"],
+                        "height": browser_features["viewport_height"],
+                    },
                     user_agent=_pw_login_ua,
-                    locale="zh-CN",  # 设置浏览器区域为中文
+                    locale=browser_features["locale"],
                     accept_downloads=True,
                     ignore_https_errors=True,
                     extra_http_headers={
-                        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"  # 设置HTTP Accept-Language header为中文
+                        "Accept-Language": browser_features["accept_lang"]
                     },
                 )
-            logger.info(f"【{self.pure_user_id}】已设置浏览器语言为中文（zh-CN）")
+            logger.info(
+                f"【{self.pure_user_id}】已设置浏览器语言为中文（{browser_features['locale']}）"
+            )
+
+            # 注入增强反检测脚本到上下文级别（所有新页面和 frame/iframe 都会继承）
+            stealth_js = self._get_safe_stealth_script(browser_features)
+            context.add_init_script(stealth_js)
+            logger.info(
+                f"【{self.pure_user_id}】已注入增强反检测脚本（上下文级别，覆盖所有iframe）"
+            )
 
             if not browser:
                 browser = context.browser
             page = context.new_page()
-
-            # 注入反检测脚本（保持与原始工作版本一致的最小脚本，避免破坏 SPA）
-            stealth_js = """
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-            Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en'] });
-            window.chrome = { runtime: {} };
-            """
-            page.add_init_script(stealth_js)
 
             logger.info(
                 f"【{self.pure_user_id}】浏览器已成功启动（{browser_mode}模式）"
@@ -7816,10 +7927,49 @@ class XianyuSliderStealth:
                 login_frame = None
                 found_login_form = False
                 iframes = []
+                frame_candidates = []
 
-                # 等待页面和iframe加载完成
+                # goofish /im 是 SPA，登录弹窗 iframe 经常在页面初次稳定后异步插入。
+                # 不能只 sleep 1 秒，否则会误判为“无 iframe / 无登录表单”。
                 logger.info(f"【{self.pure_user_id}】等待页面和iframe加载...")
-                time.sleep(1)  # 增加等待时间，确保iframe加载完成
+                surface_wait_deadline = time.time() + 12
+                last_dom_iframe_count = 0
+                last_frame_count = 0
+                while time.time() < surface_wait_deadline:
+                    try:
+                        last_dom_iframe_count = int(
+                            page.evaluate(
+                                "() => document.querySelectorAll('iframe').length"
+                            )
+                        )
+                    except Exception:
+                        last_dom_iframe_count = 0
+
+                    try:
+                        current_frames = list(page.frames)
+                    except Exception:
+                        current_frames = []
+
+                    frame_candidates = [
+                        frame
+                        for frame in current_frames
+                        if frame is not getattr(page, "main_frame", None)
+                    ]
+                    last_frame_count = len(frame_candidates)
+
+                    if (
+                        self._page_has_login_form(page)
+                        or last_dom_iframe_count > 0
+                        or last_frame_count > 0
+                        or self._page_has_keep_login_prompt(page)
+                    ):
+                        break
+
+                    time.sleep(0.5)
+
+                logger.info(
+                    f"【{self.pure_user_id}】登录表面探测完成: DOM iframe={last_dom_iframe_count}, frame对象={last_frame_count}"
+                )
 
                 # 先尝试在主页面查找登录表单
                 logger.info(f"【{self.pure_user_id}】在主页面查找登录表单...")
@@ -7848,53 +7998,153 @@ class XianyuSliderStealth:
                 # 如果主页面没找到，再在iframe中查找
                 if not found_login_form:
                     iframes = page.query_selector_all("iframe")
-                    logger.info(f"【{self.pure_user_id}】找到 {len(iframes)} 个 iframe")
+                    try:
+                        frame_candidates = [
+                            frame
+                            for frame in list(page.frames)
+                            if frame is not getattr(page, "main_frame", None)
+                        ]
+                    except Exception:
+                        frame_candidates = []
+
+                    logger.info(
+                        f"【{self.pure_user_id}】找到 {len(iframes)} 个 DOM iframe，{len(frame_candidates)} 个 frame对象"
+                    )
 
                     # 尝试在iframe中查找登录表单
-                    for idx, iframe in enumerate(iframes):
+                    for idx, frame in enumerate(frame_candidates):
                         try:
-                            frame = iframe.content_frame()
-                            if frame:
-                                # 等待iframe内容加载
+                            # 等待iframe内容加载
+                            try:
+                                frame.wait_for_load_state(
+                                    "domcontentloaded", timeout=3000
+                                )
+                            except Exception:
+                                pass
+
+                            # 检查是否有登录表单
+                            login_selectors = [
+                                "#fm-login-id",
+                                'input[name="fm-login-id"]',
+                                'input[placeholder*="手机号"]',
+                                'input[placeholder*="邮箱"]',
+                            ]
+                            for selector in login_selectors:
                                 try:
-                                    frame.wait_for_selector(
-                                        "#fm-login-id", timeout=3000
-                                    )
-                                except:
-                                    pass
+                                    element = frame.query_selector(selector)
+                                    if element and element.is_visible():
+                                        logger.info(
+                                            f"【{self.pure_user_id}】✓ 在Frame {idx} 找到登录表单: {selector}, url={getattr(frame, 'url', 'unknown')}"
+                                        )
+                                        login_frame = frame
+                                        found_login_form = True
+                                        break
+                                except Exception:
+                                    continue
 
-                                # 检查是否有登录表单
-                                login_selectors = [
-                                    "#fm-login-id",
-                                    'input[name="fm-login-id"]',
-                                    'input[placeholder*="手机号"]',
-                                    'input[placeholder*="邮箱"]',
-                                ]
-                                for selector in login_selectors:
-                                    try:
-                                        element = frame.query_selector(selector)
-                                        if element and element.is_visible():
-                                            logger.info(
-                                                f"【{self.pure_user_id}】✓ 在Frame {idx} 找到登录表单: {selector}"
-                                            )
-                                            login_frame = frame
-                                            found_login_form = True
-                                            break
-                                    except:
-                                        continue
-
-                                if found_login_form:
-                                    break
-                                else:
-                                    # Frame存在但没有登录表单，可能是滑块验证frame
-                                    logger.debug(
-                                        f"【{self.pure_user_id}】Frame {idx} 未找到登录表单"
-                                    )
+                            if found_login_form:
+                                break
+                            else:
+                                # Frame存在但没有登录表单，可能是滑块验证frame
+                                logger.debug(
+                                    f"【{self.pure_user_id}】Frame {idx} 未找到登录表单, url={getattr(frame, 'url', 'unknown')}"
+                                )
                         except Exception as e:
                             logger.debug(
                                 f"【{self.pure_user_id}】检查Frame {idx}时出错: {e}"
                             )
                             continue
+
+                # 有些页面初次进入 /im 只展示顶部“登录”入口，并不会立刻弹出登录 iframe。
+                # 此时主动点击登录入口，再重新探测一次登录表面。
+                if (
+                    not found_login_form
+                    and len(iframes) == 0
+                    and len(frame_candidates) == 0
+                ):
+                    logger.warning(
+                        f"【{self.pure_user_id}】未发现登录弹窗，尝试点击页面登录入口..."
+                    )
+                    login_entry_selectors = [
+                        'button:has-text("登录")',
+                        'a:has-text("登录")',
+                        "text=登录",
+                        '[class*="login"]',
+                    ]
+                    login_entry_clicked = False
+                    for selector in login_entry_selectors:
+                        try:
+                            trigger = page.query_selector(selector)
+                            if trigger and trigger.is_visible():
+                                trigger.click(timeout=3000)
+                                login_entry_clicked = True
+                                logger.info(
+                                    f"【{self.pure_user_id}】已点击登录入口: {selector}"
+                                )
+                                break
+                        except Exception:
+                            continue
+
+                    if login_entry_clicked:
+                        time.sleep(2)
+
+                        try:
+                            iframes = page.query_selector_all("iframe")
+                        except Exception:
+                            iframes = []
+
+                        try:
+                            frame_candidates = [
+                                frame
+                                for frame in list(page.frames)
+                                if frame is not getattr(page, "main_frame", None)
+                            ]
+                        except Exception:
+                            frame_candidates = []
+
+                        if not found_login_form:
+                            for selector in main_page_selectors:
+                                try:
+                                    element = page.query_selector(selector)
+                                    if element and element.is_visible():
+                                        logger.info(
+                                            f"【{self.pure_user_id}】✓ 点击登录入口后在主页面找到登录表单元素: {selector}"
+                                        )
+                                        login_frame = page
+                                        found_login_form = True
+                                        break
+                                except Exception:
+                                    continue
+
+                        if not found_login_form:
+                            for idx, frame in enumerate(frame_candidates):
+                                try:
+                                    for selector in [
+                                        "#fm-login-id",
+                                        'input[name="fm-login-id"]',
+                                        'input[placeholder*="手机号"]',
+                                        'input[placeholder*="邮箱"]',
+                                    ]:
+                                        try:
+                                            element = frame.query_selector(selector)
+                                            if element and element.is_visible():
+                                                logger.info(
+                                                    f"【{self.pure_user_id}】✓ 点击登录入口后在Frame {idx} 找到登录表单: {selector}, url={getattr(frame, 'url', 'unknown')}"
+                                                )
+                                                login_frame = frame
+                                                found_login_form = True
+                                                break
+                                        except Exception:
+                                            continue
+
+                                    if found_login_form:
+                                        break
+                                except Exception:
+                                    continue
+
+                        logger.info(
+                            f"【{self.pure_user_id}】登录入口点击后复检: DOM iframe={len(iframes)}, frame对象={len(frame_candidates)}, found_login_form={found_login_form}"
+                        )
 
                 # 【情况1】找到frame且找到登录表单 → 正常登录流程
                 if found_login_form:
@@ -7903,7 +8153,7 @@ class XianyuSliderStealth:
                     )
 
                 # 【情况2】找到frame但未找到登录表单 → 可能已登录，直接检测滑块
-                elif len(iframes) > 0:
+                elif len(iframes) > 0 or len(frame_candidates) > 0:
                     logger.warning(
                         f"【{self.pure_user_id}】找到iframe但未找到登录表单，可能已登录，检测滑块..."
                     )
@@ -7975,33 +8225,43 @@ class XianyuSliderStealth:
 
                         # 如果主页面没找到，在所有frame中查找
                         if not has_slider:
-                            for idx, iframe in enumerate(iframes):
+                            slider_frames = frame_candidates
+                            if not slider_frames:
                                 try:
-                                    frame = iframe.content_frame()
-                                    if frame:
-                                        # 等待frame内容加载
+                                    slider_frames = [
+                                        frame
+                                        for frame in list(page.frames)
+                                        if frame
+                                        is not getattr(page, "main_frame", None)
+                                    ]
+                                except Exception:
+                                    slider_frames = []
+
+                            for idx, frame in enumerate(slider_frames):
+                                try:
+                                    # 等待frame内容加载
+                                    try:
+                                        frame.wait_for_load_state(
+                                            "domcontentloaded", timeout=2000
+                                        )
+                                    except Exception:
+                                        pass
+
+                                    for selector in slider_selectors:
                                         try:
-                                            frame.wait_for_load_state(
-                                                "domcontentloaded", timeout=2000
-                                            )
-                                        except:
-                                            pass
+                                            element = frame.query_selector(selector)
+                                            if element and element.is_visible():
+                                                logger.info(
+                                                    f"【{self.pure_user_id}】✅ 在Frame {idx} 检测到滑块验证元素: {selector}"
+                                                )
+                                                has_slider = True
+                                                detected_slider_frame = frame
+                                                break
+                                        except Exception:
+                                            continue
 
-                                        for selector in slider_selectors:
-                                            try:
-                                                element = frame.query_selector(selector)
-                                                if element and element.is_visible():
-                                                    logger.info(
-                                                        f"【{self.pure_user_id}】✅ 在Frame {idx} 检测到滑块验证元素: {selector}"
-                                                    )
-                                                    has_slider = True
-                                                    detected_slider_frame = frame
-                                                    break
-                                            except:
-                                                continue
-
-                                        if has_slider:
-                                            break
+                                    if has_slider:
+                                        break
                                 except Exception as e:
                                     logger.debug(
                                         f"【{self.pure_user_id}】检查Frame {idx}时出错: {e}"
