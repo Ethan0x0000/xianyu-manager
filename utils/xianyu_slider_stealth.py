@@ -7546,21 +7546,16 @@ class XianyuSliderStealth:
             playwright = sync_playwright().start()
             browser = None
 
-            # 🔧 2026-04-04 关键：先生成浏览器画像，确保 HTTP UA 与 JS 指纹一致
-            _browser_features = self._get_random_browser_features()
-            # 强制使用 Windows 画像的 UA（与浏览器实际 HTTP header 对齐，避免 UA 与 platform 不匹配被检测）
-            _pw_login_ua = _browser_features["user_agent"]
-            _pw_login_viewport = {
-                "width": int(_browser_features["viewport_width"]),
-                "height": int(_browser_features["viewport_height"]),
-            }
+            # 🔧 2026-04-04: 更新 Chrome UA 版本（118-120 太旧会被风控标记）
+            # 注意：必须使用 Windows UA，与 Docker/Linux 的 persistent context 历史数据兼容
+            _pw_login_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
 
             if force_clean_context:
                 browser = playwright.chromium.launch(
                     headless=not show_browser, args=browser_args
                 )
                 context = browser.new_context(
-                    viewport=_pw_login_viewport,
+                    viewport={"width": 1920, "height": 1080},
                     user_agent=_pw_login_ua,
                     locale="zh-CN",
                     accept_downloads=True,
@@ -7630,7 +7625,7 @@ class XianyuSliderStealth:
                     user_data_dir,
                     headless=not show_browser,
                     args=browser_args,
-                    viewport=_pw_login_viewport,
+                    viewport={"width": 1920, "height": 1080},
                     user_agent=_pw_login_ua,
                     locale="zh-CN",  # 设置浏览器区域为中文
                     accept_downloads=True,
@@ -7645,25 +7640,14 @@ class XianyuSliderStealth:
                 browser = context.browser
             page = context.new_page()
 
-            # 注入反检测脚本（使用与浏览器上下文完全一致的画像参数，避免 UA/platform 不匹配）
-            try:
-                # 使用上面已生成的 _browser_features（与 HTTP headers 完全一致）
-                _stealth_js = self._get_safe_stealth_script(_browser_features)
-                page.add_init_script(_stealth_js)
-                logger.info(
-                    f"【{self.pure_user_id}】已注入安全反检测脚本（画像: {_browser_features.get('profile_id', 'unknown')}）"
-                )
-            except Exception as _stealth_err:
-                logger.warning(
-                    f"【{self.pure_user_id}】反检测脚本注入失败，回退到基础版: {_stealth_err}"
-                )
-                stealth_js = """
-                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-                Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en'] });
-                window.chrome = { runtime: {} };
-                """
-                page.add_init_script(stealth_js)
+            # 注入反检测脚本（保持与原始工作版本一致的最小脚本，避免破坏 SPA）
+            stealth_js = """
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en'] });
+            window.chrome = { runtime: {} };
+            """
+            page.add_init_script(stealth_js)
 
             logger.info(
                 f"【{self.pure_user_id}】浏览器已成功启动（{browser_mode}模式）"
