@@ -3458,6 +3458,179 @@ class XianyuSliderStealth:
             }};
         """
 
+    def _get_safe_stealth_script(self, browser_features):
+        """获取安全反检测脚本（适用于密码登录流程）
+
+        与 _get_stealth_script 相比，去掉了可能破坏 SPA 页面的危险覆盖：
+        - ❌ EventTarget.prototype.addEventListener 包装（会破坏 React 事件系统）
+        - ❌ document.fonts 覆盖（会阻止字体加载回调）
+        - ❌ Intl.DateTimeFormat.prototype.resolvedOptions 覆盖（返回不完整对象）
+        - ❌ Performance.prototype.now 噪声（可能干扰页面计时逻辑）
+        - ❌ navigator.mediaDevices 覆盖（可能破坏媒体检测）
+
+        保留了对滑块验证最关键的：
+        - ✅ navigator.webdriver 隐藏
+        - ✅ plugins / languages / platform / vendor 伪装
+        - ✅ screen / viewport / outerWidth/Height 一致性
+        - ✅ hardwareConcurrency / deviceMemory 伪装
+        - ✅ Canvas / WebGL / Audio 指纹随机化
+        - ✅ Playwright 全局变量隐藏
+        - ✅ window.chrome 对象伪装
+        - ✅ 电池 / 权限 / DoNotTrack API 伪装
+        """
+        return f"""
+            // === 核心反检测 ===
+            Object.defineProperty(navigator, 'webdriver', {{ get: () => undefined }});
+            delete navigator.__proto__.webdriver;
+            
+            // plugins
+            const pluginCount = {browser_features["plugin_count"]};
+            Object.defineProperty(navigator, 'plugins', {{
+                get: () => Array.from({{length: pluginCount}}, (_, i) => ({{
+                    name: 'Plugin' + i, description: 'Plugin ' + i
+                }})),
+            }});
+            
+            // languages
+            Object.defineProperty(navigator, 'languages', {{
+                get: () => ['{browser_features["locale"]}', 'zh', 'en'],
+            }});
+            
+            // screen 一致性
+            Object.defineProperty(screen, 'availWidth', {{ get: () => {browser_features["viewport_width"]} }});
+            Object.defineProperty(screen, 'availHeight', {{ get: () => {browser_features["viewport_height"] - 40} }});
+            Object.defineProperty(screen, 'width', {{ get: () => {browser_features["viewport_width"]} }});
+            Object.defineProperty(screen, 'height', {{ get: () => {browser_features["viewport_height"]} }});
+            Object.defineProperty(screen, 'colorDepth', {{ get: () => {browser_features["color_depth"]} }});
+            Object.defineProperty(screen, 'pixelDepth', {{ get: () => {browser_features["color_depth"]} }});
+            
+            // 硬件
+            Object.defineProperty(navigator, 'hardwareConcurrency', {{ get: () => {browser_features["hardware_concurrency"]} }});
+            Object.defineProperty(navigator, 'deviceMemory', {{ get: () => {browser_features["device_memory"]} }});
+            
+            // platform / vendor / userAgent（与 HTTP header 一致！）
+            Object.defineProperty(navigator, 'maxTouchPoints', {{ get: () => {browser_features["max_touch_points"]} }});
+            Object.defineProperty(navigator, 'platform', {{ get: () => '{browser_features["platform"]}' }});
+            Object.defineProperty(navigator, 'vendor', {{ get: () => '{browser_features["vendor"]}' }});
+            Object.defineProperty(navigator, 'vendorSub', {{ get: () => '' }});
+            Object.defineProperty(navigator, 'productSub', {{ get: () => '20030107' }});
+            Object.defineProperty(navigator, 'userAgent', {{ get: () => '{browser_features["user_agent"]}' }});
+            
+            // 连接信息
+            Object.defineProperty(navigator, 'connection', {{
+                get: () => ({{
+                    effectiveType: "{browser_features["connection_type"]}",
+                    rtt: {browser_features["connection_rtt"]},
+                    downlink: {browser_features["connection_downlink"]}
+                }})
+            }});
+            
+            // headless 隐藏
+            Object.defineProperty(navigator, 'headless', {{ get: () => undefined }});
+            Object.defineProperty(window, 'outerHeight', {{ get: () => {browser_features["viewport_height"]} }});
+            Object.defineProperty(window, 'outerWidth', {{ get: () => {browser_features["viewport_width"]} }});
+            
+            // === Playwright 痕迹清理 ===
+            delete window.playwright;
+            delete window.__playwright;
+            delete window.__pw_manual;
+            delete window.__pw_original;
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
+            delete window._selenium;
+            delete window._phantom;
+            delete window.callPhantom;
+            delete window.phantom;
+            delete window.Buffer;
+            delete window.emit;
+            delete window.spawn;
+            
+            // webdriver 相关属性清理
+            Object.defineProperty(navigator, '__webdriver_script_fn', {{ get: () => undefined }});
+            Object.defineProperty(navigator, '__webdriver_evaluate', {{ get: () => undefined }});
+            Object.defineProperty(navigator, '__driver_evaluate', {{ get: () => undefined }});
+            
+            // === Canvas 指纹随机化 ===
+            const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+            HTMLCanvasElement.prototype.toDataURL = function() {{
+                const context = this.getContext('2d');
+                if (context) {{
+                    try {{
+                        const imageData = context.getImageData(0, 0, this.width, this.height);
+                        const data = imageData.data;
+                        for (let i = 0; i < data.length; i += 4) {{
+                            if (Math.random() < 0.001) {{
+                                data[i] = Math.floor(Math.random() * 256);
+                            }}
+                        }}
+                        context.putImageData(imageData, 0, 0);
+                    }} catch(e) {{}}
+                }}
+                return originalToDataURL.apply(this, arguments);
+            }};
+            
+            // === WebGL 指纹随机化 ===
+            const originalGetParameter = WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter = function(parameter) {{
+                if (parameter === 37445) return 'Intel Inc.';
+                if (parameter === 37446) return 'Intel Iris OpenGL Engine';
+                return originalGetParameter.call(this, parameter);
+            }};
+            
+            // === Audio 指纹随机化 ===
+            const originalGetChannelData = AudioBuffer.prototype.getChannelData;
+            AudioBuffer.prototype.getChannelData = function(channel) {{
+                const data = originalGetChannelData.call(this, channel);
+                for (let i = 0; i < data.length; i += 1000) {{
+                    if (Math.random() < 0.01) {{
+                        data[i] += Math.random() * 0.0001;
+                    }}
+                }}
+                return data;
+            }};
+            
+            // === 电池 API ===
+            if (navigator.getBattery) {{
+                const originalGetBattery = navigator.getBattery;
+                navigator.getBattery = async function() {{
+                    const battery = await originalGetBattery.call(navigator);
+                    Object.defineProperty(battery, 'charging', {{ get: () => {str(browser_features["battery_charging"]).lower()} }});
+                    Object.defineProperty(battery, 'level', {{ get: () => {browser_features["battery_level"]:.2f} }});
+                    return battery;
+                }};
+            }}
+            
+            // === Permission API ===
+            const originalQuery = Permissions.prototype.query;
+            Permissions.prototype.query = function(parameters) {{
+                if (parameters.name === 'notifications') {{
+                    return Promise.resolve({{ state: '{browser_features["notification_permission"]}' }});
+                }}
+                return originalQuery.apply(this, arguments);
+            }};
+            
+            // DoNotTrack
+            Object.defineProperty(navigator, 'doNotTrack', {{ get: () => '{browser_features["do_not_track"]}' }});
+            
+            // === chrome 对象伪装 ===
+            window.chrome = {{
+                runtime: {{ id: undefined, sendMessage: function() {{}}, connect: function() {{}} }},
+                loadTimes: function() {{}},
+                csi: function() {{}},
+                app: {{}}
+            }};
+            
+            // Function.toString 保护
+            const oldToString = Function.prototype.toString;
+            Function.prototype.toString = function() {{
+                if (this === navigator.permissions.query) {{
+                    return 'function query() {{ [native code] }}';
+                }}
+                return oldToString.call(this);
+            }};
+        """
+
     def _bezier_curve(self, p0, p1, p2, p3, t):
         """三次贝塞尔曲线 - 生成更自然的轨迹"""
         return (
@@ -7372,13 +7545,23 @@ class XianyuSliderStealth:
             # 启动浏览器
             playwright = sync_playwright().start()
             browser = None
+
+            # 🔧 2026-04-04 关键：先生成浏览器画像，确保 HTTP UA 与 JS 指纹一致
+            _browser_features = self._get_random_browser_features()
+            # 强制使用 Windows 画像的 UA（与浏览器实际 HTTP header 对齐，避免 UA 与 platform 不匹配被检测）
+            _pw_login_ua = _browser_features["user_agent"]
+            _pw_login_viewport = {
+                "width": int(_browser_features["viewport_width"]),
+                "height": int(_browser_features["viewport_height"]),
+            }
+
             if force_clean_context:
                 browser = playwright.chromium.launch(
                     headless=not show_browser, args=browser_args
                 )
                 context = browser.new_context(
-                    viewport={"width": 1920, "height": 1080},
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+                    viewport=_pw_login_viewport,
+                    user_agent=_pw_login_ua,
                     locale="zh-CN",
                     accept_downloads=True,
                     ignore_https_errors=True,
@@ -7447,8 +7630,8 @@ class XianyuSliderStealth:
                     user_data_dir,
                     headless=not show_browser,
                     args=browser_args,
-                    viewport={"width": 1920, "height": 1080},
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+                    viewport=_pw_login_viewport,
+                    user_agent=_pw_login_ua,
                     locale="zh-CN",  # 设置浏览器区域为中文
                     accept_downloads=True,
                     ignore_https_errors=True,
@@ -7462,19 +7645,17 @@ class XianyuSliderStealth:
                 browser = context.browser
             page = context.new_page()
 
-            # 注入完整反检测脚本（与 init_browser 流程一致，覆盖 canvas/WebGL/audio 指纹等）
+            # 注入反检测脚本（使用与浏览器上下文完全一致的画像参数，避免 UA/platform 不匹配）
             try:
-                _browser_features = self._get_random_browser_features()
-                # 覆盖部分字段以匹配当前浏览器上下文实际值
-                _browser_features["viewport_width"] = 1920
-                _browser_features["viewport_height"] = 1080
-                page.add_init_script(self._get_stealth_script(_browser_features))
+                # 使用上面已生成的 _browser_features（与 HTTP headers 完全一致）
+                _stealth_js = self._get_safe_stealth_script(_browser_features)
+                page.add_init_script(_stealth_js)
                 logger.info(
-                    f"【{self.pure_user_id}】已注入完整反检测脚本（画像: {_browser_features.get('profile_id', 'unknown')}）"
+                    f"【{self.pure_user_id}】已注入安全反检测脚本（画像: {_browser_features.get('profile_id', 'unknown')}）"
                 )
             except Exception as _stealth_err:
                 logger.warning(
-                    f"【{self.pure_user_id}】完整反检测脚本注入失败，回退到基础版: {_stealth_err}"
+                    f"【{self.pure_user_id}】反检测脚本注入失败，回退到基础版: {_stealth_err}"
                 )
                 stealth_js = """
                 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
