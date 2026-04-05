@@ -256,6 +256,25 @@
 - `python -m compileall app/runtime/account_registry.py` succeeded.
 - `lsp_diagnostics app/runtime/account_registry.py` reported no diagnostics.
 
+## [2026-04-06] Task 21: Startup / Bootstrap Assembly
+
+### Completed
+- Rebuilt `app/bootstrap/app_factory.py` into the real FastAPI composition root with `create_app()`, database preparation, router assembly, static mounting, and runtime supervisor lifecycle wiring.
+- Reduced `Start.py` to a thin `uvicorn.run(...)` wrapper around `load_settings()` + `create_app(settings)`.
+
+### Key Findings
+- The previous bootstrap stub was broken at import time because it tried to import `token_refresh` from `app.auth`, while the extracted refresh service actually lives in `app.runtime.token_refresh`.
+- Task 6's placeholder package-root bindings (`app.runtime`, `app.services`) were good enough for circular-import isolation, but Task 21 needed the composition root to bind concrete extracted modules/classes instead of those stubs.
+- The minimum legacy startup behavior still worth preserving in the new bootstrap layer is filesystem/database preparation: ensuring the `data/` parent exists and migrating a legacy root-level `xianyu_data.db` into the new `data/xianyu_data.db` location before schema initialization.
+- A lightweight FastAPI lifespan hook is enough for the current stage: it centralizes `RuntimeSupervisor.start()/stop()` without reintroducing the old `Start.py -> reply_server.py -> cookie_manager.py` thread/global bootstrap chain.
+
+### Verification
+- `lsp_diagnostics` reported no diagnostics for `Start.py` and `app/bootstrap/app_factory.py`.
+- `python -m compileall "Start.py" "app/bootstrap/app_factory.py"` succeeded.
+- `python -c "from app.bootstrap.app_factory import create_app; app = create_app(); print(app.title)"` printed `Xianyu Auto-Reply System`.
+- `python -c "from app.bootstrap.app_factory import build_container; c = build_container(test_mode=True); print(sorted(c.keys()))"` succeeded and returned the expected service keys.
+- Evidence saved to `.sisyphus/evidence/task-21-startup.txt`.
+
 ## [2026-04-05] Task 3: Suspicious Integrations Cleanup
 
 ### Completed
