@@ -15571,14 +15571,9 @@ class XianyuLive:
                         # 从防抖任务中移除
                         del self.message_debounce_tasks[chat_id]
 
-                    current_message_id = last_msg.get("message_id")
-                    if (
-                        current_message_id
-                        and not await self._mark_message_processed_if_new(
-                            current_message_id
-                        )
-                    ):
-                        return
+                    # 注意：消息级去重已在 handle_message 调用 _schedule_debounced_reply 之前完成
+                    # 此处不再重复调用 _mark_message_processed_if_new，避免因提前标记导致
+                    # 防抖机制中唯一的合法处理被误判为"已处理"而跳过
 
                     # 处理最后一条消息
                     logger.info(
@@ -17146,6 +17141,17 @@ class XianyuLive:
             # 使用防抖机制处理聊天消息回复
             # 如果用户连续发送消息，等待用户停止发送后再回复最后一条消息
             message_id = self._extract_message_id(message)
+
+            # 【关键修复】在进入防抖调度之前，先做消息级去重
+            # 闲鱼IM协议会通过不同的WebSocket包重复推送同一条消息（相同messageId）
+            # 如果不在此处拦截，两次推送会各自创建独立的防抖任务，导致双重回复
+            if message_id:
+                if not await self._mark_message_processed_if_new(message_id):
+                    logger.info(
+                        f"【{self.cookie_id}】[{msg_id}] ⏹️ 消息已处理过(messageId={message_id[:20]}...)，跳过重复调度"
+                    )
+                    return
+
             await self._schedule_debounced_reply(
                 chat_id=chat_id,
                 message_data=message,
