@@ -20,7 +20,7 @@ Key Functions:
 
 import base64
 import json
-from typing import Any, Optional
+from typing import Any
 from loguru import logger
 
 
@@ -154,7 +154,7 @@ def build_send_frame(
 
     logger.debug(
         f"Built send frame: mid={message_id}, cid={conversation_id}, "
-        "receiver={receiver_id}, text_len={len(text_content)}"
+        f"receiver={receiver_id}, text_len={len(text_content)}"
     )
 
     return frame
@@ -209,7 +209,7 @@ def build_create_chat_frame(
 
     logger.debug(
         f"Built create chat frame: mid={message_id}, to_id={to_id}, "
-        "my_id={my_id}, item_id={item_id}"
+        f"my_id={my_id}, item_id={item_id}"
     )
 
     return frame
