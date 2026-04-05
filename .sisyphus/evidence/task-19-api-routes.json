@@ -1,0 +1,39 @@
+{
+  "import_ok": true,
+  "compileall_ok": true,
+  "health_status_code": 200,
+  "health_json": {
+    "status": "healthy",
+    "version": "2.0"
+  },
+  "routes": [
+    "/api/accounts",
+    "/api/accounts/{account_id}",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/delivery/logs/recent",
+    "/api/delivery/rules",
+    "/api/items",
+    "/api/items/{account_id}/{item_id}",
+    "/api/keywords",
+    "/api/replies/keywords",
+    "/api/runtime/accounts",
+    "/api/runtime/accounts/{account_id}/start",
+    "/api/runtime/accounts/{account_id}/stop",
+    "/api/settings",
+    "/api/shipping/logs",
+    "/api/shipping/rules",
+    "/docs",
+    "/docs/oauth2-redirect",
+    "/health",
+    "/openapi.json",
+    "/redoc"
+  ],
+  "removed_statuses": {
+    "/register": 404,
+    "/api/users/register": 404,
+    "/api/notifications/channels": 404,
+    "/api/update": 404,
+    "/check_update": 404
+  }
+}

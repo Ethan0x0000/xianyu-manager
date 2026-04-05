@@ -1,0 +1,5 @@
+/register 404
+/api/users/register 404
+/api/notifications/channels 404
+/api/update 404
+/check_update 404

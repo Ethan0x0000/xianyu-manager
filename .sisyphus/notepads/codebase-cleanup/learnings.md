@@ -82,6 +82,24 @@
 - ✓ All imports resolve correctly
 - ✓ Type hints present on all public functions
 
+## [2026-04-06] Task 19: Scoped FastAPI Routers
+
+### Completed
+- Created `app/api/dependencies.py` for DB-path and bearer-token dependencies backed by the new single-admin session store.
+- Created `app/api/schemas.py` for health/auth/account/keyword/runtime/settings payloads.
+- Split the retained control-plane surface into `app/api/routers/{auth,accounts,replies,shipping,items,runtime,system}.py` plus router assembly in `app/api/routers/__init__.py`.
+
+### Key Findings
+- The clean extraction line is domain-based, not legacy-path-based: auth, accounts, replies, shipping, items, runtime, and system map cleanly onto the new `app/*` packages without importing `cookie_manager.py` or `XianyuAutoAsync.py`.
+- Removed-scope endpoints must disappear entirely rather than live behind compatibility shims; a minimal router tree made it easy to prove `/register`, notification, and updater paths now return 404.
+- `build_router()` is enough for verification at this stage: a throwaway `FastAPI()` + `TestClient` can validate the retained route inventory before wiring the full legacy entrypoint down to the new package.
+
+### Verification
+- `python -c "... build_router/TestClient/compileall verification ..."` succeeded and wrote `.sisyphus/evidence/task-19-api-routes.json` plus `.sisyphus/evidence/task-19-api-removed.txt`.
+- `/health` returned `200` with `{"status": "healthy", "version": "2.0"}` from the rebuilt router stack.
+- Removed routes `/register`, `/api/users/register`, `/api/notifications/channels`, `/api/update`, and `/check_update` all returned `404` in the minimal app.
+- `lsp_diagnostics` on `app/api` with `severity=error` returned zero diagnostics.
+
 ### Blockers Resolved
 - None - task completed cleanly
 
