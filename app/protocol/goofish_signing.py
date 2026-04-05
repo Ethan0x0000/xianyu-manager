@@ -51,10 +51,6 @@ def load_signing_runtime() -> Any:
     try:
         import execjs
 
-        # Check available runtimes
-        available_runtimes = execjs.runtime_names
-        logger.debug(f"Available JavaScript runtimes: {available_runtimes}")
-
         # Get current runtime
         current_runtime = execjs.get()
         logger.debug(f"Using JavaScript runtime: {current_runtime.name}")

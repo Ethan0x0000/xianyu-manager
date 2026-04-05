@@ -11,7 +11,7 @@ import os
 import yaml
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 CONFIG_FILE = "global_config.yml"
 
@@ -73,7 +73,7 @@ def load_settings(config_path: str = CONFIG_FILE) -> Settings:
     Returns:
         Settings dataclass instance with all configuration values
     """
-    raw: dict = {}
+    raw: dict[str, Any] = {}
     if Path(config_path).exists():
         with open(config_path, encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}
@@ -84,12 +84,13 @@ def load_settings(config_path: str = CONFIG_FILE) -> Settings:
 
     # Build settings with env var overrides (env vars take precedence)
     settings = Settings(
-        api_host=os.environ.get("API_HOST", api_config.get("host", "0.0.0.0")),
-        api_port=int(os.environ.get("API_PORT", api_config.get("port", 8090))),
+        api_host=os.environ.get("API_HOST") or str(api_config.get("host", "0.0.0.0")),
+        api_port=int(os.environ.get("API_PORT") or str(api_config.get("port", 8090))),
         db_path=os.environ.get("DB_PATH", "data/xianyu_data.db"),
         admin_username=os.environ.get("ADMIN_USERNAME", ""),
         admin_password_hash=os.environ.get("ADMIN_PASSWORD_HASH", ""),
-        secret_key=os.environ.get("SECRET_KEY", os.environ.get("ADMIN_SECRET_KEY", "")),
+        secret_key=os.environ.get("SECRET_KEY")
+        or os.environ.get("ADMIN_SECRET_KEY", ""),
         secret_encryption_key=os.environ.get("SECRET_ENCRYPTION_KEY", ""),
         ai_enabled=os.environ.get("AI_ENABLED", "false").lower() == "true",
         enable_headful=os.environ.get("ENABLE_HEADFUL", "false").lower() == "true",
@@ -97,9 +98,8 @@ def load_settings(config_path: str = CONFIG_FILE) -> Settings:
         enable_vnc=os.environ.get("ENABLE_VNC", "false").lower() == "true",
         sql_log_enabled=os.environ.get("SQL_LOG_ENABLED", "false").lower() == "true",
         sql_log_level=os.environ.get("SQL_LOG_LEVEL", "INFO"),
-        websocket_url=os.environ.get(
-            "WEBSOCKET_URL", raw.get("WEBSOCKET_URL", "wss://wss-goofish.dingtalk.com/")
-        ),
+        websocket_url=os.environ.get("WEBSOCKET_URL")
+        or str(raw.get("WEBSOCKET_URL", "wss://wss-goofish.dingtalk.com/")),
         auto_reply_enabled=os.environ.get("AUTO_REPLY_ENABLED", "true").lower()
         == "true",
         auto_shipping_enabled=os.environ.get("AUTO_SHIPPING_ENABLED", "true").lower()
