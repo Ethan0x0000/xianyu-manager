@@ -446,3 +446,15 @@
 ### Verification
 - `python -c "from app.services.item_polish import ItemPolishService; print(ItemPolishService.__name__)"` succeeded after extraction.
 - Service scan confirmed zero `exec(` and zero `secure_item_polish_ultra` references in `app/services/item_polish.py`; evidence saved to `.sisyphus/evidence/task-16-polish-import.txt` and `.sisyphus/evidence/task-16-polish-scan.txt`.
+
+## [2026-04-06] Task 18: Login Service Extraction
+
+### Key Findings
+- Keep the boundary explicit: `app/services/login_service.py` owns Xianyu seller-account login only, while `app/auth/` remains the separate admin-panel auth domain.
+- The extracted QR flow should be bootstrap-safe for now: create in-memory `QRLoginSession` metadata with a generated `session_id`, derived QR URL, expiry window, and status, while leaving live QR polling/network orchestration to later tasks.
+- Password-login orchestration should fail fast on empty `account_id`, `username`, or `password` before any browser/network work; this preserves the later runtime handoff boundary and matches the cleanup goal of making validation deterministic.
+- Existing monolith code still carries richer QR/password recovery and captcha behavior in `XianyuAutoAsync.py`, so the extracted service should stay intentionally smaller and delegate future slider handling through `app.runtime.captcha_bridge.SliderAdapter` instead of importing frozen internals directly.
+
+### Verification
+- QR-session bootstrap evidence saved to `.sisyphus/evidence/task-18-qr-bootstrap.txt`.
+- Invalid password-login validation evidence saved to `.sisyphus/evidence/task-18-password-invalid.txt`.
