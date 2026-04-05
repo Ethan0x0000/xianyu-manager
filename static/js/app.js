@@ -10575,6 +10575,7 @@ function startRefreshCookiePolling(sessionId, cookieId) {
                     break;
                 case 'verification_required':
                     // 需要人脸认证，显示验证截图或链接
+                    toggleLoading(false);
                     updateRefreshCookieStatus('需要人脸验证，请查看弹出的验证窗口');
                     // 使用账号密码登录的验证显示函数
                     showPasswordLoginQRCode(
