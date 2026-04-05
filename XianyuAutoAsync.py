@@ -281,6 +281,10 @@ class InitAuthError(Exception):
     """WebSocket 已建立，但初始化鉴权失败。"""
 
 
+class RestartScheduled(Exception):
+    """已触发实例重启，当前实例应停止后续初始化重试。"""
+
+
 class AutoReplyPauseManager:
     """自动回复暂停管理器"""
 
@@ -1647,7 +1651,11 @@ class XianyuLive:
             return 0
 
     def __init__(
-        self, cookies_str=None, cookie_id: str = "default", user_id: int = None
+        self,
+        cookies_str=None,
+        cookie_id: str = "default",
+        user_id: int = None,
+        register_instance: bool = True,
     ):
         """初始化闲鱼直播类"""
         logger.info(f"【{cookie_id}】开始初始化XianyuLive...")
@@ -1852,7 +1860,10 @@ class XianyuLive:
         self._init_order_status_handler()
 
         # 注册实例到类级别字典（用于API调用）
-        self._register_instance()
+        if register_instance:
+            self._register_instance()
+        else:
+            logger.info(f"【{self.cookie_id}】探针实例模式：跳过全局实例注册")
 
     @property
     def message_debounce_delay(self):
@@ -6217,6 +6228,44 @@ class XianyuLive:
         window = window_seconds or self.slider_success_reentry_window
         return (time.time() - self.last_slider_success_at) <= window
 
+    def _create_cookie_handoff_probe(self, cookies_str: str):
+        """创建认证交接预检探针实例，不污染当前运行实例注册。"""
+        return XianyuLive(
+            cookies_str=cookies_str,
+            cookie_id=self.cookie_id,
+            user_id=self.user_id,
+            register_instance=False,
+        )
+
+    async def _preflight_cookie_refresh_handoff(self, cookies_str: str):
+        """在自动Cookie刷新后预检Token，并为新实例预热认证状态。"""
+        logger.info(f"【{self.cookie_id}】开始执行自动Cookie刷新交接预检...")
+        probe = self._create_cookie_handoff_probe(cookies_str)
+        try:
+            await probe.preflight_token_after_manual_refresh()
+            preflighted_cookies_str = probe.cookies_str
+            preflighted_cookies_dict = probe.cookies or trans_cookies(
+                preflighted_cookies_str
+            )
+            self.clear_init_auth_failure_state(self.cookie_id)
+            self.last_init_failure_reason = None
+            self.last_init_failure_type = None
+            self.init_auth_failures = 0
+            self.connection_restart_flag = True
+            logger.info(
+                f"【{self.cookie_id}】自动Cookie刷新交接预检通过，已清理旧实例熔断状态并为新实例预热认证"
+            )
+            return preflighted_cookies_str, preflighted_cookies_dict
+        finally:
+            close_session = getattr(probe, "close_session", None)
+            if close_session is not None:
+                try:
+                    await close_session()
+                except Exception as close_e:
+                    logger.warning(
+                        f"【{self.cookie_id}】关闭认证交接预检探针Session失败: {self._safe_str(close_e)}"
+                    )
+
     async def preflight_token_after_manual_refresh(self) -> str:
         """手动刷新成功后的 token 预检，确认新实例可直接完成初始化。
 
@@ -7365,6 +7414,21 @@ class XianyuLive:
                 # 更新数据库中的cookies
                 await self.update_config_cookies()
                 logger.info(f"【{self.cookie_id}】数据库cookies更新成功")
+
+                (
+                    preflighted_cookies_str,
+                    preflighted_cookies_dict,
+                ) = await self._preflight_cookie_refresh_handoff(self.cookies_str)
+                if preflighted_cookies_str != self.cookies_str:
+                    self.cookies_str = preflighted_cookies_str
+                    self.cookies = preflighted_cookies_dict
+                    await self.update_config_cookies()
+                    logger.info(
+                        f"【{self.cookie_id}】交接预检返回了更新后的Cookie，已同步写回数据库"
+                    )
+                else:
+                    self.cookies = preflighted_cookies_dict
+                logger.info(f"【{self.cookie_id}】自动Cookie刷新交接预检成功")
 
                 # ⚠️ 在重启前完成所有需要的操作（如发送通知）
                 # 因为重启触发后2秒内任务会被取消，不能再执行任何async操作
@@ -12912,6 +12976,16 @@ class XianyuLive:
             self.last_init_failure_reason = (
                 self.last_token_refresh_status or "token_missing_after_refresh"
             )
+            if (
+                self.connection_restart_flag
+                and self.last_init_failure_reason == "restarted_after_cookie_refresh"
+            ):
+                logger.info(
+                    f"【{self.cookie_id}】Cookie刷新交接已安排重启，旧实例停止当前初始化流程，等待新实例接管"
+                )
+                raise RestartScheduled(
+                    "Cookie刷新交接已触发实例重启，旧实例无需再记录初始化失败"
+                )
             logger.error(f"【{self.cookie_id}】无法获取有效token，初始化鉴权失败")
             # 只有在没有尝试刷新token的情况下才发送通知，避免与refresh_token中的通知重复
             if not token_refresh_attempted:
@@ -17429,6 +17503,19 @@ class XianyuLive:
                                 logger.info(
                                     f"【{self.cookie_id}】WebSocket连接已退出，引用已清理"
                                 )
+
+                except RestartScheduled as e:
+                    self.current_token = None
+                    self.connection_failures = 0
+                    self._set_connection_state(
+                        ConnectionState.RECONNECTING,
+                        "Cookie刷新交接中，等待新实例接管",
+                    )
+                    logger.info(f"【{self.cookie_id}】{self._safe_str(e)}")
+                    logger.info(
+                        f"【{self.cookie_id}】已触发Cookie刷新交接，旧实例退出初始化重试循环，等待重启实例接管"
+                    )
+                    return
 
                 except InitAuthError as e:
                     error_msg = self._safe_str(e)

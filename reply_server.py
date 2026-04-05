@@ -3128,6 +3128,7 @@ async def _execute_password_login(
                             cookies_str=cookies_str,
                             cookie_id=account_id,
                             user_id=user_id,
+                            register_instance=False,
                         )
                         asyncio.run(temp_xianyu.preflight_token_after_manual_refresh())
                         cookies_str = temp_xianyu.cookies_str
