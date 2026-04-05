@@ -4023,9 +4023,6 @@ async function checkAuth() {
         systemRestartBtn.style.display = 'inline-block';
         }
 
-        const dashboardHotUpdateGroup = document.getElementById('dashboardHotUpdateGroup');
-        if (dashboardHotUpdateGroup) {
-        dashboardHotUpdateGroup.style.display = 'inline-flex';
         }
 
         // 显示登录与注册设置
@@ -12157,7 +12154,6 @@ async function loadSystemSettings() {
             const outgoingConfigs = document.getElementById('outgoing-configs');
             const backupManagement = document.getElementById('backup-management');
             const systemRestartBtn = document.getElementById('system-restart-btn');
-            const dashboardHotUpdateGroup = document.getElementById('dashboardHotUpdateGroup');
 
             if (apiSecuritySettings) {
                 apiSecuritySettings.style.display = isAdmin ? 'block' : 'none';
@@ -12174,13 +12170,10 @@ async function loadSystemSettings() {
             if (systemRestartBtn) {
                 systemRestartBtn.style.display = isAdmin ? 'inline-block' : 'none';
             }
-            if (dashboardHotUpdateGroup) {
-                dashboardHotUpdateGroup.style.display = isAdmin ? 'inline-flex' : 'none';
             }
 
             // 如果是管理员，加载所有管理员设置
             if (isAdmin) {
-                refreshHotUpdatePreferencesMenu();
                 await loadAPISecuritySettings();
                 await loadRegistrationSettings();
                 await loadLoginInfoSettings();
@@ -12191,12 +12184,9 @@ async function loadSystemSettings() {
         console.error('获取用户信息失败:', error);
         // 出错时隐藏管理员功能
         const loginInfoSettings = document.getElementById('login-info-settings');
-        const dashboardHotUpdateGroup = document.getElementById('dashboardHotUpdateGroup');
         if (loginInfoSettings) {
             loginInfoSettings.style.display = 'none';
         }
-        if (dashboardHotUpdateGroup) {
-            dashboardHotUpdateGroup.style.display = 'none';
         }
     }
 }
@@ -15878,109 +15868,7 @@ const DEFAULT_VERSION = 'v1.8.2';
 // 当前本地版本号（动态从 version.txt 读取）
 let LOCAL_VERSION = DEFAULT_VERSION;
 
-// 缓存远程版本信息
-let remoteVersionInfo = null;
-const HOT_UPDATE_STORAGE_KEYS = {
-    autoCheckDisabled: 'hot_update_auto_check_disabled',
-    ignoredVersion: 'hot_update_ignored_version'
-};
 
-function isHotUpdateAutoCheckEnabled() {
-    return localStorage.getItem(HOT_UPDATE_STORAGE_KEYS.autoCheckDisabled) !== 'true';
-}
-
-function setHotUpdateAutoCheckEnabled(enabled) {
-    localStorage.setItem(HOT_UPDATE_STORAGE_KEYS.autoCheckDisabled, enabled ? 'false' : 'true');
-}
-
-function getIgnoredHotUpdateVersion() {
-    return localStorage.getItem(HOT_UPDATE_STORAGE_KEYS.ignoredVersion) || '';
-}
-
-function setIgnoredHotUpdateVersion(version) {
-    if (version) {
-        localStorage.setItem(HOT_UPDATE_STORAGE_KEYS.ignoredVersion, version);
-    }
-}
-
-function getHotUpdateTargetVersion(updateInfo = remoteVersionInfo) {
-    return updateInfo?.new_version || (updateInfo?.has_update ? updateInfo?.version : '') || '';
-}
-
-function shouldSuppressHotUpdateHint(updateInfo = remoteVersionInfo) {
-    const targetVersion = getHotUpdateTargetVersion(updateInfo);
-    return !isHotUpdateAutoCheckEnabled() || (!!targetVersion && getIgnoredHotUpdateVersion() === targetVersion);
-}
-
-function refreshHotUpdateButtonState(updateInfo = remoteVersionInfo) {
-    const dashboardHotUpdateGroup = document.getElementById('dashboardHotUpdateGroup');
-    const dashboardHotUpdateBtn = document.getElementById('dashboardHotUpdateBtn');
-    const dashboardHotUpdateMenuBtn = document.getElementById('dashboardHotUpdateMenuBtn');
-    if (!dashboardHotUpdateGroup || !dashboardHotUpdateBtn || !dashboardHotUpdateMenuBtn) return;
-
-    dashboardHotUpdateBtn.disabled = false;
-    dashboardHotUpdateBtn.innerHTML = '<i class="bi bi-cloud-download me-1"></i>检查更新';
-    dashboardHotUpdateMenuBtn.disabled = false;
-    dashboardHotUpdateGroup.classList.remove('has-update', 'is-loading');
-
-    const hasUpdate = Boolean(updateInfo && (updateInfo.has_update || updateInfo.new_version));
-    if (!hasUpdate || shouldSuppressHotUpdateHint(updateInfo)) {
-        return;
-    }
-
-    dashboardHotUpdateGroup.classList.add('has-update');
-    dashboardHotUpdateBtn.innerHTML = `<i class="bi bi-cloud-download me-1"></i>有新版本 ${getHotUpdateTargetVersion(updateInfo)}`;
-}
-
-function updateHotUpdatePreferenceStatus(message = '', type = 'info') {
-    if (message) {
-        showToast(message, type === 'success' ? 'success' : 'info');
-    }
-}
-
-function refreshHotUpdatePreferencesMenu() {
-    const autoCheckToggle = document.getElementById('dashboardHotUpdateAutoCheckToggle');
-    const ignoredVersionHint = document.getElementById('dashboardHotUpdatePreferenceHint');
-    const clearIgnoredBtn = document.getElementById('dashboardClearIgnoredVersionBtn');
-    const ignoredVersion = getIgnoredHotUpdateVersion();
-
-    if (autoCheckToggle) {
-        autoCheckToggle.textContent = isHotUpdateAutoCheckEnabled() ? '关闭自动检查' : '开启自动检查';
-    }
-
-    if (ignoredVersionHint) {
-        const autoCheckText = isHotUpdateAutoCheckEnabled() ? '自动检查：已开启' : '自动检查：已关闭';
-        ignoredVersionHint.textContent = ignoredVersion
-            ? `${autoCheckText} · 已忽略 ${ignoredVersion}`
-            : `${autoCheckText} · 当前未忽略任何版本`;
-    }
-
-    if (clearIgnoredBtn) {
-        clearIgnoredBtn.disabled = !ignoredVersion;
-    }
-}
-
-function toggleHotUpdateAutoCheck() {
-    const nextEnabled = !isHotUpdateAutoCheckEnabled();
-    setHotUpdateAutoCheckEnabled(nextEnabled);
-    refreshHotUpdatePreferencesMenu();
-    refreshHotUpdateButtonState();
-    updateHotUpdatePreferenceStatus(
-        nextEnabled
-            ? '自动检查更新已开启，当前浏览器进入系统时会自动检测'
-            : '自动检查更新已关闭，仍可手动点击“检查更新”',
-        'success'
-    );
-}
-
-function clearIgnoredUpdateVersion(showFeedback = true) {
-    localStorage.removeItem(HOT_UPDATE_STORAGE_KEYS.ignoredVersion);
-    refreshHotUpdatePreferencesMenu();
-    refreshHotUpdateButtonState();
-    if (showFeedback) {
-        updateHotUpdatePreferenceStatus('已清除忽略版本设置', 'success');
-    }
-}
 
 // 本地版本历史（远程服务禁用时使用）
 const LOCAL_VERSION_HISTORY = {
@@ -16044,7 +15932,6 @@ const LOCAL_VERSION_HISTORY = {
             version: 'v1.7.3',
             date: '2026-03-21',
             updates: [
-                '【修复】热更新清单改为优先读取上一版 Release 资产中的 update_files.json，避免 deleted_files 丢失',
                 '【修复】修正同版本下热更新可能回滚清单生成脚本的问题，补齐删除清单并完善后续版本生成逻辑'
             ]
         },
@@ -16148,8 +16035,7 @@ const LOCAL_VERSION_HISTORY = {
             updates: [
                 '【新功能】热更新清单改为自动扫描 Python、HTML、静态资源和前端源码文件，无需手动维护白名单',
                 '【新功能】新增发版预检查脚本，可在发布前检查版本号、改名/删除文件和未跟踪热更新文件',
-                '【新功能】热更新支持按清单删除旧文件，删除前会自动备份，降低改名和清理残留文件的风险',
-                '【优化】update_files.json 改为由 GitHub Actions 自动生成并上传到 Release，仓库内不再手动维护'
+                '【新功能】热更新支持按清单删除旧文件，删除前会自动备份，降低改名和清理残留文件的风险'
             ]
         },
         {
@@ -16172,18 +16058,16 @@ const LOCAL_VERSION_HISTORY = {
             version: 'v1.5.2',
             date: '2026-03-10',
             updates: [
-                '【新功能】GitHub Actions 在创建 Release 前自动生成并上传 update_files.json，无需手动维护更新清单',
                 '【优化】热更新检测前会实时刷新本地版本号，本地版本变更后无需重启服务即可重新检查更新',
                 '【修复】热更新执行权限改为按管理员身份判断，不再强依赖用户名必须为 admin',
-                '【修复】前端更新失败提示补充后端 detail 信息，避免只显示“未知错误”'
+                '【修复】前端更新失败提示补充后端 detail 信息，避免只显示"未知错误"'
             ]
         },
         {
             version: 'v1.5.1',
             date: '2026-03-10',
             updates: [
-                '【新功能】接入 GitHub Releases 在线更新，支持从最新 Release 读取 update_files.json 检查热更新',
-                '【新功能】仪表盘版本区新增管理员可见的“检查更新”入口，可直接执行热更新',
+                '【新功能】仪表盘版本区新增管理员可见的"检查更新"入口，可直接执行热更新',
                 '【优化】更新清单解析兼容 GitHub 资产返回 application/octet-stream 的场景，避免检查更新失败',
                 '【优化】版本区样式统一为 badge 视觉，并修复版本号与更新入口的垂直居中显示',
                 '【新功能】新增 GitHub Actions 自动发布工作流，push 到 main 且版本变化后可自动创建 tag 和 Release'
@@ -16518,22 +16402,6 @@ async function loadSystemVersion() {
             systemVersionBadge.onclick = () => showChangelogModal();
         }
 
-        refreshHotUpdateButtonState();
-
-        if (!isHotUpdateAutoCheckEnabled()) {
-            return;
-        }
-
-        // 调用后端检查更新（复用热更新接口）
-        try {
-            const checkResult = await checkHotUpdate();
-            if (checkResult && checkResult.has_update) {
-                refreshHotUpdateButtonState(checkResult);
-            }
-        } catch (e) {
-            console.warn('版本检查失败:', e.message);
-        }
-
     } catch (error) {
         console.error('版本加载失败:', error);
         document.getElementById('versionNumber').textContent = '未知';
@@ -16703,10 +16571,7 @@ async function showUpdateInfo(newVersion) {
                     <!-- 底部 -->
                     <div class="modal-footer py-3" style="background: #fff; border-top: 1px solid #e8ecf0;">
                         <button type="button" class="btn" style="background: #f0f0f0; color: #666; border: none; font-size: 15px; padding: 8px 20px;" data-bs-dismiss="modal">
-                            <i class="bi bi-x-lg me-1"></i>稍后再说
-                        </button>
-                        <button type="button" class="btn" id="hotUpdateBtn" style="background: linear-gradient(135deg, #28a745, #20c997); color: #fff; border: none; font-size: 15px; padding: 8px 20px;" onclick="performHotUpdate()">
-                            <i class="bi bi-cloud-download me-1"></i>一键热更新
+                            <i class="bi bi-x-lg me-1"></i>关闭
                         </button>
                     </div>
                 </div>
@@ -17421,462 +17286,6 @@ async function showVersionInfo(version) {
         modal.remove();
     });
 }
-
-// =============================================================================
-// 热更新功能
-// =============================================================================
-
-/**
- * 检查热更新
- * 调用后端API检查是否有可用的文件更新
- */
-async function checkHotUpdate() {
-    try {
-        const response = await fetch('/api/update/check', {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
-        
-        if (!response.ok) {
-            console.warn('热更新检查请求失败:', response.status);
-            return null;
-        }
-        
-        const result = await response.json();
-        
-        if (!result.success) {
-            console.warn('热更新检查返回错误:', result.message);
-            return null;
-        }
-
-        if (result.data) {
-            remoteVersionInfo = result.data;
-        }
-        
-        return result.data;
-        
-    } catch (error) {
-        console.error('热更新检查失败:', error);
-        return null;
-    }
-}
-
-/**
- * 执行热更新
- * 下载并安装所有可用更新
- */
-async function performHotUpdate() {
-    setHotUpdateButtonsLoading();
-    
-    try {
-        // 先检查是否有更新
-        const checkResult = await checkHotUpdate();
-        
-        if (!checkResult) {
-            showToast('检查更新失败，请稍后重试', 'danger');
-            resetHotUpdateBtn();
-            return;
-        }
-        
-        if (!checkResult.has_update) {
-            showToast('已是最新版本，无需更新', 'info');
-            resetHotUpdateBtn();
-            return;
-        }
-        
-        // 显示确认对话框
-        const dialogAction = await showHotUpdateConfirmDialog(checkResult);
-        
-        if (dialogAction !== 'confirm') {
-            if (dialogAction === 'ignore') {
-                const ignoredVersion = getHotUpdateTargetVersion(checkResult);
-                setIgnoredHotUpdateVersion(ignoredVersion);
-                refreshHotUpdatePreferencesMenu();
-                refreshHotUpdateButtonState(checkResult);
-                updateHotUpdatePreferenceStatus(`已忽略版本 ${ignoredVersion}`, 'success');
-            }
-            resetHotUpdateBtn();
-            return;
-        }
-        
-        // 显示更新进度
-        showHotUpdateProgress();
-        
-        // 执行更新
-        const response = await fetch('/api/update/apply', {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
-        
-        const result = await response.json();
-        
-        // 关闭进度弹窗
-        closeHotUpdateProgress();
-        
-        if (result.success && result.data.success) {
-            // 更新成功
-            const updateData = result.data;
-            const updatedCount = updateData.updated_files?.length || 0;
-            const deletedCount = updateData.deleted_files?.length || 0;
-            
-            if (updateData.needs_restart) {
-                // 需要重启
-                showHotUpdateRestartDialog(updateData);
-            } else {
-                // 不需要重启，刷新页面即可
-                showToast(`更新成功！更新 ${updatedCount} 个文件，删除 ${deletedCount} 个旧文件`, 'success');
-                
-                // 3秒后刷新页面
-                setTimeout(() => {
-                    window.location.reload();
-                }, 3000);
-            }
-        } else {
-            showToast('更新失败: ' + (result.detail || result.message || result.data?.message || '未知错误'), 'danger');
-        }
-        
-    } catch (error) {
-        console.error('热更新执行失败:', error);
-        showToast('更新失败: ' + error.message, 'danger');
-        closeHotUpdateProgress();
-    } finally {
-        resetHotUpdateBtn();
-    }
-}
-
-/**
- * 重置热更新按钮状态
- */
-function resetHotUpdateBtn() {
-    const hotUpdateBtn = document.getElementById('hotUpdateBtn');
-    if (hotUpdateBtn) {
-        hotUpdateBtn.disabled = false;
-        hotUpdateBtn.innerHTML = '<i class="bi bi-cloud-download me-1"></i>一键热更新';
-    }
-    refreshHotUpdateButtonState();
-}
-
-function setHotUpdateButtonsLoading() {
-    const hotUpdateBtn = document.getElementById('hotUpdateBtn');
-    if (hotUpdateBtn) {
-        hotUpdateBtn.disabled = true;
-        hotUpdateBtn.innerHTML = '<i class="bi bi-arrow-repeat spin me-1"></i>检查更新中...';
-    }
-    const dashboardHotUpdateGroup = document.getElementById('dashboardHotUpdateGroup');
-    const dashboardHotUpdateBtn = document.getElementById('dashboardHotUpdateBtn');
-    const dashboardHotUpdateMenuBtn = document.getElementById('dashboardHotUpdateMenuBtn');
-    if (dashboardHotUpdateBtn) {
-        dashboardHotUpdateBtn.disabled = true;
-        dashboardHotUpdateBtn.innerHTML = '<i class="bi bi-arrow-repeat spin me-1"></i>检查更新中...';
-    }
-    if (dashboardHotUpdateMenuBtn) {
-        dashboardHotUpdateMenuBtn.disabled = true;
-    }
-    if (dashboardHotUpdateGroup) {
-        dashboardHotUpdateGroup.classList.add('is-loading');
-    }
-}
-
-/**
- * 显示热更新确认对话框
- */
-async function showHotUpdateConfirmDialog(updateInfo) {
-    return new Promise((resolve) => {
-        const filesInfo = updateInfo.files && updateInfo.files.length > 0
-            ? updateInfo.files.map(f => `<li><code>${f.path}</code> ${f.requires_restart ? '<span class="badge bg-warning">需重启</span>' : ''}</li>`).join('')
-            : '<li>本次无新增或覆盖文件</li>';
-        const deletedFilesInfo = updateInfo.deleted_files && updateInfo.deleted_files.length > 0
-            ? updateInfo.deleted_files.map(f => `<li><code>${f.path}</code> ${f.requires_restart ? '<span class="badge bg-warning">需重启</span>' : ''}</li>`).join('')
-            : '';
-        
-        const totalSizeKB = (updateInfo.total_size / 1024).toFixed(2);
-        const deletedCount = updateInfo.deleted_files_count || 0;
-        const deleteSection = deletedCount > 0 ? `
-                            <div class="mb-3">
-                                <div style="color: #444; font-size: 14px; font-weight: 600; margin-bottom: 8px;">
-                                    <i class="bi bi-trash me-1"></i>将删除以下旧文件：
-                                </div>
-                                <div style="max-height: 120px; overflow-y: auto; background: #fff3f3; border-radius: 8px; padding: 12px; border: 1px solid #f5c2c7;">
-                                    <ul class="list-unstyled mb-0" style="font-size: 13px;">
-                                        ${deletedFilesInfo}
-                                    </ul>
-                                </div>
-                            </div>
-        ` : '';
-        
-        const modalHtml = `
-            <div class="modal fade" id="hotUpdateConfirmModal" tabindex="-1">
-                <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content" style="border: none; border-radius: 14px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
-                        <div class="modal-header py-3" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); border: none;">
-                            <h5 class="modal-title mb-0" style="color: #fff; font-weight: 600; font-size: 18px;">
-                                <i class="bi bi-cloud-download me-2"></i>确认热更新
-                            </h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body py-4 px-4" style="background: linear-gradient(180deg, #f0fff4 0%, #f8fafc 100%);">
-                            <div class="d-flex align-items-center justify-content-between mb-3 p-3 rounded-3" style="background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-                                <div>
-                                    <div style="color: #666; font-size: 14px;">当前版本</div>
-                                    <div style="font-size: 18px; font-weight: 600; color: #6c757d;">${updateInfo.current_version}</div>
-                                </div>
-                                <i class="bi bi-arrow-right" style="color: #28a745; font-size: 1.5rem;"></i>
-                                <div>
-                                    <div style="color: #28a745; font-size: 14px;">目标版本</div>
-                                    <div style="font-size: 18px; font-weight: 600; color: #28a745;">${updateInfo.new_version}</div>
-                                </div>
-                            </div>
-                            
-                            <div class="mb-3 p-3 rounded-3" style="background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <span style="color: #666;"><i class="bi bi-files me-1"></i>更新文件数</span>
-                                    <span style="font-weight: 600; color: #333;">${updateInfo.files_count} 个</span>
-                                </div>
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <span style="color: #666;"><i class="bi bi-trash me-1"></i>删除旧文件数</span>
-                                    <span style="font-weight: 600; color: #333;">${deletedCount} 个</span>
-                                </div>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span style="color: #666;"><i class="bi bi-hdd me-1"></i>下载大小</span>
-                                    <span style="font-weight: 600; color: #333;">${totalSizeKB} KB</span>
-                                </div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <div style="color: #444; font-size: 14px; font-weight: 600; margin-bottom: 8px;">
-                                    <i class="bi bi-list-check me-1"></i>将更新以下文件：
-                                </div>
-                                <div style="max-height: 150px; overflow-y: auto; background: #f8f9fa; border-radius: 8px; padding: 12px;">
-                                    <ul class="list-unstyled mb-0" style="font-size: 13px;">
-                                        ${filesInfo}
-                                    </ul>
-                                </div>
-                            </div>
-                            ${deleteSection}
-                            
-                            <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #fff3cd, #ffeeba); color: #856404; font-size: 14px;">
-                                <i class="bi bi-exclamation-triangle me-2"></i>
-                                <strong>提示：</strong>更新和删除前都会自动备份原文件，如遇问题可恢复。
-                            </div>
-                        </div>
-                        <div class="modal-footer py-3" style="background: #fff; border-top: 1px solid #e8ecf0;">
-                            <button type="button" class="btn btn-link text-decoration-none me-auto px-0" style="color: #6c757d;" id="hotUpdateIgnoreBtn">
-                                忽略此版本
-                            </button>
-                            <button type="button" class="btn" style="background: #f0f0f0; color: #666; border: none; font-size: 15px; padding: 8px 20px;" data-bs-dismiss="modal" id="hotUpdateCancelBtn">
-                                本次跳过
-                            </button>
-                            <button type="button" class="btn" style="background: linear-gradient(135deg, #28a745, #20c997); color: #fff; border: none; font-size: 15px; padding: 8px 20px;" id="hotUpdateConfirmBtn">
-                                <i class="bi bi-check-lg me-1"></i>立即更新
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        // 移除已存在的模态框
-        const existingModal = document.getElementById('hotUpdateConfirmModal');
-        if (existingModal) {
-            existingModal.remove();
-        }
-        
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-        
-        const modalElement = document.getElementById('hotUpdateConfirmModal');
-        const modal = new bootstrap.Modal(modalElement);
-        let resolved = false;
-
-        const finish = (action) => {
-            if (resolved) return;
-            resolved = true;
-            modal.hide();
-            resolve(action);
-        };
-        
-        // 绑定按钮事件
-        document.getElementById('hotUpdateConfirmBtn').onclick = () => {
-            finish('confirm');
-        };
-        
-        document.getElementById('hotUpdateCancelBtn').onclick = () => {
-            finish('skip');
-        };
-
-        document.getElementById('hotUpdateIgnoreBtn').onclick = () => {
-            finish('ignore');
-        };
-        
-        modalElement.addEventListener('hidden.bs.modal', () => {
-            modalElement.remove();
-            if (!resolved) {
-                resolved = true;
-                resolve('skip');
-            }
-        });
-        
-        modal.show();
-    });
-}
-
-/**
- * 显示热更新进度
- */
-function showHotUpdateProgress() {
-    const modalHtml = `
-        <div class="modal fade" id="hotUpdateProgressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-            <div class="modal-dialog modal-dialog-centered modal-sm">
-                <div class="modal-content" style="border: none; border-radius: 14px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
-                    <div class="modal-body py-4 px-4 text-center" style="background: linear-gradient(180deg, #f0f4ff 0%, #f8fafc 100%);">
-                        <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <h5 style="color: #333; font-weight: 600;">正在更新...</h5>
-                        <p id="hotUpdateProgressText" style="color: #666; font-size: 14px; margin-bottom: 0;">正在下载更新文件</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // 移除已存在的模态框
-    const existingModal = document.getElementById('hotUpdateProgressModal');
-    if (existingModal) {
-        existingModal.remove();
-    }
-    
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    
-    const modal = new bootstrap.Modal(document.getElementById('hotUpdateProgressModal'));
-    modal.show();
-}
-
-/**
- * 关闭热更新进度
- */
-function closeHotUpdateProgress() {
-    const modal = document.getElementById('hotUpdateProgressModal');
-    if (modal) {
-        const bsModal = bootstrap.Modal.getInstance(modal);
-        if (bsModal) {
-            bsModal.hide();
-        }
-        setTimeout(() => modal.remove(), 300);
-    }
-}
-
-/**
- * 显示需要重启的对话框
- */
-function showHotUpdateRestartDialog(updateData) {
-    const modalHtml = `
-        <div class="modal fade" id="hotUpdateRestartModal" tabindex="-1">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content" style="border: none; border-radius: 14px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.15);">
-                    <div class="modal-header py-3" style="background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%); border: none;">
-                        <h5 class="modal-title mb-0" style="color: #fff; font-weight: 600; font-size: 18px;">
-                            <i class="bi bi-arrow-repeat me-2"></i>更新完成，需要重启
-                        </h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body py-4 px-4" style="background: linear-gradient(180deg, #fffbf0 0%, #f8fafc 100%);">
-                        <div class="text-center mb-4">
-                            <i class="bi bi-check-circle-fill" style="font-size: 64px; color: #28a745;"></i>
-                        </div>
-                        
-                        <div class="mb-3 p-3 rounded-3" style="background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
-                            <p style="color: #333; font-size: 16px; margin-bottom: 8px;">
-                                <strong>更新成功！</strong>
-                            </p>
-                            <p style="color: #666; font-size: 14px; margin-bottom: 0;">
-                                共更新 <strong>${updateData.updated_files.length}</strong> 个文件到版本 <strong>${updateData.new_version}</strong>
-                            </p>
-                        </div>
-                        
-                        <div class="rounded-3 p-3" style="background: linear-gradient(135deg, #fff3cd, #ffeeba); color: #856404; font-size: 14px;">
-                            <i class="bi bi-exclamation-triangle me-2"></i>
-                            <strong>注意：</strong>部分更新的文件需要重启应用才能生效。
-                        </div>
-                    </div>
-                    <div class="modal-footer py-3" style="background: #fff; border-top: 1px solid #e8ecf0;">
-                        <button type="button" class="btn" style="background: #f0f0f0; color: #666; border: none; font-size: 15px; padding: 8px 20px;" data-bs-dismiss="modal">
-                            稍后重启
-                        </button>
-                        <button type="button" class="btn" style="background: linear-gradient(135deg, #ffc107, #ff9800); color: #fff; border: none; font-size: 15px; padding: 8px 20px;" onclick="restartApplication()">
-                            <i class="bi bi-arrow-repeat me-1"></i>立即重启
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // 移除已存在的模态框
-    const existingModal = document.getElementById('hotUpdateRestartModal');
-    if (existingModal) {
-        existingModal.remove();
-    }
-    
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    
-    const modal = new bootstrap.Modal(document.getElementById('hotUpdateRestartModal'));
-    modal.show();
-}
-
-/**
- * 重启应用
- */
-async function restartApplication() {
-    try {
-        showToast('正在重启应用...', 'info');
-        
-        const response = await fetch('/api/update/restart', {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showToast('应用正在重启，页面将在5秒后自动刷新...', 'success');
-            
-            // 5秒后刷新页面
-            setTimeout(() => {
-                window.location.reload();
-            }, 5000);
-        } else {
-            showToast('重启失败: ' + result.message, 'danger');
-        }
-        
-    } catch (error) {
-        console.error('重启应用失败:', error);
-        showToast('重启失败: ' + error.message, 'danger');
-    }
-}
-
-// 添加CSS动画
-const hotUpdateStyle = document.createElement('style');
-hotUpdateStyle.textContent = `
-    @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-    }
-    .spin {
-        animation: spin 1s linear infinite;
-    }
-`;
-document.head.appendChild(hotUpdateStyle);
 
 // ==================== 在线客服IM功能 ====================
 
