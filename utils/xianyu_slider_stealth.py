@@ -9067,8 +9067,53 @@ class XianyuSliderStealth:
                         )
                         return self._fail_login("登录未成功，无法获取Cookie")
 
+                    # 【关键修复】刷新页面以触发mtop API调用，确保 _m_h5_tk 等令牌Cookie被更新
+                    # 密码登录通过passport iframe完成，不会触发mtop API调用来刷新 _m_h5_tk
+                    # 如果不刷新，后续Token刷新API会因为 _m_h5_tk 过期而持续失败
+                    logger.info(
+                        f"【{self.pure_user_id}】刷新页面以获取最新的mtop令牌Cookie..."
+                    )
+                    try:
+                        target_page = active_page or page
+                        old_m_h5_tk = None
+                        try:
+                            for c in context.cookies():
+                                if c.get("name") == "_m_h5_tk":
+                                    old_m_h5_tk = c.get("value", "")
+                                    break
+                        except Exception:
+                            pass
+                        target_page.reload(wait_until="networkidle", timeout=15000)
+                        time.sleep(2)
+                        # 检查 _m_h5_tk 是否已更新
+                        new_m_h5_tk = None
+                        try:
+                            for c in context.cookies():
+                                if c.get("name") == "_m_h5_tk":
+                                    new_m_h5_tk = c.get("value", "")
+                                    break
+                        except Exception:
+                            pass
+                        if old_m_h5_tk and new_m_h5_tk and old_m_h5_tk != new_m_h5_tk:
+                            logger.info(
+                                f"【{self.pure_user_id}】✅ _m_h5_tk 已刷新（旧: {old_m_h5_tk[:16]}... → 新: {new_m_h5_tk[:16]}...）"
+                            )
+                        elif old_m_h5_tk and new_m_h5_tk and old_m_h5_tk == new_m_h5_tk:
+                            logger.warning(
+                                f"【{self.pure_user_id}】⚠️ _m_h5_tk 未变化，可能需要额外等待"
+                            )
+                        else:
+                            logger.info(
+                                f"【{self.pure_user_id}】页面刷新完成，_m_h5_tk 状态: old={'有' if old_m_h5_tk else '无'}, new={'有' if new_m_h5_tk else '无'}"
+                            )
+                    except Exception as reload_e:
+                        logger.warning(
+                            f"【{self.pure_user_id}】刷新页面时出错（继续获取Cookie）: {reload_e}"
+                        )
+                        time.sleep(2)
+
                     # 获取Cookie
-                    logger.info(f"【{self.pure_user_id}】等待1秒后获取Cookie...")
+                    logger.info(f"【{self.pure_user_id}】获取最新Cookie...")
                     time.sleep(1)
                     cookies_dict = {}
                     try:

@@ -6828,14 +6828,20 @@ class XianyuLive:
                                 # 返回None，让调用者知道刷新失败
                                 return None
                             else:
-                                # 刷新成功后，重新尝试获取token
-                                return await self._refresh_token_impl(
-                                    captcha_retry_count,
-                                    post_slider_session_grace_used=False,
-                                    allow_password_login_recovery=allow_password_login_recovery,
+                                # 密码登录成功并已触发实例重启（_update_cookies_and_restart）
+                                # 不再在当前实例上做递归Token刷新：
+                                #  1. 重启会在2秒后取消当前任务，递归重试很可能被截断
+                                #  2. 即使 _m_h5_tk 已在浏览器侧刷新，重启后的新实例
+                                #     会从数据库读取最新cookies，天然使用新的 _m_h5_tk
+                                # 标记为"已重启"状态（属于benign状态，不会触发异常通知）
+                                logger.info(
+                                    f"【{self.cookie_id}】密码登录刷新成功，实例重启已触发，"
+                                    f"跳过当前实例的递归Token刷新，由新实例接管"
                                 )
-
-                                # 刷新失败时继续执行原有的失败处理逻辑
+                                self.last_token_refresh_status = (
+                                    "restarted_after_cookie_refresh"
+                                )
+                                return None
 
                     logger.error(f"【{self.cookie_id}】Token刷新失败: {res_json}")
 
