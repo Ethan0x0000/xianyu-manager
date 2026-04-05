@@ -33,6 +33,7 @@ import io
 import asyncio
 import queue
 from collections import defaultdict
+from loguru import logger
 
 import cookie_manager
 from db_manager import db_manager
@@ -48,16 +49,53 @@ from utils.time_utils import (
     utc_timestamp_to_local_date_string,
     utc_timestamp_to_local_datetime,
 )
-from utils.notification_dispatcher import (
-    build_face_verify_notification,
-    SUPPORTED_NOTIFICATION_TEMPLATE_TYPES,
-    dispatch_account_notifications_sync,
-    render_notification_template,
-    resolve_verification_type_label,
-)
-from order_event_hub import order_event_hub, publish_order_update_event
 
-from loguru import logger
+SUPPORTED_NOTIFICATION_TEMPLATE_TYPES = {
+    "message",
+    "token_refresh",
+    "delivery",
+    "slider_success",
+    "face_verify",
+    "password_login_success",
+    "cookie_refresh_success",
+}
+
+
+def render_notification_template(template_type: str, **kwargs) -> str:
+    templates = {
+        "password_login_success": "账号 {account_id} 登录成功\n时间: {time}\nCookie数量: {cookie_count}",
+        "cookie_refresh_success": "账号 {account_id} 刷新成功\n时间: {time}\nCookie数量: {cookie_count}",
+        "face_verify": "账号 {account_id} 需要验证\n时间: {time_text}\n验证类型: {verification_type}\n验证地址: {verification_url}\n详情: {error_message}",
+    }
+    template = templates.get(template_type, "")
+    for key, value in kwargs.items():
+        template = template.replace(f"{{{key}}}", str(value))
+    return template
+
+
+def build_face_verify_notification(**kwargs) -> str:
+    return render_notification_template("face_verify", **kwargs)
+
+
+def resolve_verification_type_label(
+    verification_type: str = None, message: str = None, verification_url: str = None
+) -> str:
+    text = f"{verification_type or ''} {message or ''} {verification_url or ''}"
+    if "短信" in text:
+        return "短信验证"
+    if "二维码" in text:
+        return "二维码验证"
+    if "人脸" in text:
+        return "人脸验证"
+    return verification_type or "身份验证"
+
+
+def dispatch_account_notifications_sync(*args, **kwargs) -> bool:
+    logger.warning("通知分发功能已禁用，跳过发送")
+    return False
+
+
+from order_event_hub import order_event_hub, publish_order_update_event
 
 # 刮刮乐远程控制路由
 try:

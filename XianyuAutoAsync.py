@@ -42,13 +42,52 @@ import aiohttp
 from collections import defaultdict
 from typing import Any, Dict, Optional, Tuple
 from db_manager import db_manager
-from utils.notification_dispatcher import (
-    dispatch_account_notifications,
-    format_notification_template,
-    get_notification_template_text,
-    guess_verification_type,
-    render_notification_template,
-)
+
+
+DEFAULT_NOTIFICATION_TEMPLATES = {
+    "message": "账号 {account_id} 收到新消息\n买家: {buyer_name}\n买家ID: {buyer_id}\n商品ID: {item_id}\n会话ID: {chat_id}\n内容: {message}\n时间: {time}",
+    "token_refresh": "账号 {account_id} 状态提醒\n时间: {time}\n原因: {error_message}\n验证地址: {verification_url}",
+    "delivery": "账号 {account_id} 发货提醒\n买家: {buyer_name}\n买家ID: {buyer_id}\n商品ID: {item_id}\n会话ID: {chat_id}\n结果: {result}\n时间: {time}",
+    "slider_success": "账号 {account_id} 滑块验证成功\n时间: {time}",
+    "face_verify": "账号 {account_id} 需要验证\n时间: {time}\n验证类型: {verification_type}\n验证地址: {verification_url}",
+    "password_login_success": "账号 {account_id} 密码登录成功\n时间: {time}\nCookie数量: {cookie_count}",
+    "cookie_refresh_success": "账号 {account_id} Cookie刷新成功\n时间: {time}\nCookie数量: {cookie_count}",
+}
+
+
+def get_notification_template_text(template_type: str) -> str:
+    return DEFAULT_NOTIFICATION_TEMPLATES.get(template_type, "")
+
+
+def format_notification_template(template: str, **kwargs) -> str:
+    result = template or ""
+    for key, value in kwargs.items():
+        result = result.replace(f"{{{key}}}", str(value))
+    return result
+
+
+def render_notification_template(template_type: str, **kwargs) -> str:
+    return format_notification_template(
+        get_notification_template_text(template_type), **kwargs
+    )
+
+
+def guess_verification_type(
+    error_message: str = None, verification_url: str = None
+) -> str:
+    message = f"{error_message or ''} {verification_url or ''}"
+    if "短信" in message:
+        return "短信验证"
+    if "二维码" in message:
+        return "二维码验证"
+    if "人脸" in message:
+        return "人脸验证"
+    return "身份验证"
+
+
+async def dispatch_account_notifications(*args, **kwargs) -> bool:
+    logger.warning("通知分发功能已禁用，跳过发送")
+    return False
 
 
 DELIVERY_BATCH_MAX_UNITS = 10
@@ -3166,8 +3205,10 @@ class XianyuLive:
                 f'[{msg_time}] 【{self.cookie_id}】[{msg_id}] 使用模板"{template.get("name", "")}"进行好评: {comment_content[:50]}...'
             )
 
-            # 调用好评接口
-            result = await self._call_comment_api(order_id, comment_content)
+            logger.warning(
+                f"[{msg_time}] 【{self.cookie_id}】[{msg_id}] 自动好评外部接口已移除，跳过处理"
+            )
+            result = {"success": False, "message": "自动好评接口已移除"}
 
             if result.get("success"):
                 logger.info(
@@ -3197,52 +3238,6 @@ class XianyuLive:
         except Exception as e:
             logger.error(f"【{self.cookie_id}】提取评价订单ID失败: {self._safe_str(e)}")
             return None
-
-    async def _call_comment_api(self, order_id: str, comment: str) -> dict:
-        """调用好评接口"""
-        import aiohttp
-
-        try:
-            # 好评接口地址
-            comment_api_url = "http://119.29.64.68:8081/comment"
-
-            # 获取当前账号的cookie
-            cookie_str = self.cookies_str
-
-            payload = {
-                "cookie_str": cookie_str,
-                "order_id": order_id,
-                "comment": comment,
-            }
-
-            headers = {"accept": "application/json", "Content-Type": "application/json"}
-
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    comment_api_url, json=payload, headers=headers, timeout=30
-                ) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        return {
-                            "success": result.get("status") == "success",
-                            "message": result.get("message", "好评成功"),
-                        }
-                    else:
-                        error_text = await response.text()
-                        logger.error(
-                            f"【{self.cookie_id}】好评接口返回错误: status={response.status}, body={error_text}"
-                        )
-                        return {
-                            "success": False,
-                            "message": f"接口返回错误: {response.status}",
-                        }
-
-        except asyncio.TimeoutError:
-            logger.error(f"【{self.cookie_id}】好评接口请求超时")
-            return {"success": False, "message": "请求超时"}
-        except Exception as e:
-            logger.error(f"【{self.cookie_id}】调用好评接口异常: {self._safe_str(e)}")
-            return {"success": False, "message": str(e)}
 
     def can_auto_delivery(self, order_id: str) -> bool:
         """检查是否可以进行自动发货（防重复发货）- 基于订单ID"""
@@ -9781,35 +9776,10 @@ class XianyuLive:
                 logger.warning("📱 QQ通知 - QQ号码配置为空，无法发送通知")
                 return False
 
-            # 构建请求URL
-            api_url = "http://36.111.68.231:3000/sendPrivateMsg"
-            params = {"qq": qq_number, "msg": message}
-
-            logger.info(f"📱 QQ通知 - 请求URL: {api_url}")
-            logger.info(f"📱 QQ通知 - 请求参数: qq={qq_number}, msg长度={len(message)}")
-
-            # 发送GET请求
-            async with aiohttp.ClientSession() as session:
-                async with session.get(api_url, params=params, timeout=10) as response:
-                    response_text = await response.text()
-                    logger.info(f"📱 QQ通知 - 响应状态: {response.status}")
-
-                    # 需求：502 视为成功，且不打印返回内容
-                    if response.status == 502:
-                        logger.info(
-                            f"📱 QQ通知发送成功: {qq_number} (状态码: {response.status})"
-                        )
-                        return True
-                    elif response.status == 200:
-                        logger.info(
-                            f"📱 QQ通知发送成功: {qq_number} (状态码: {response.status})"
-                        )
-                        logger.warning(f"📱 QQ通知 - 响应内容: {response_text}")
-                        return True
-                    else:
-                        logger.warning(f"📱 QQ通知发送失败: HTTP {response.status}")
-                        logger.warning(f"📱 QQ通知 - 响应内容: {response_text}")
-                        return False
+            logger.warning(
+                f"📱 QQ通知功能已禁用，跳过发送: qq={qq_number}, msg长度={len(message)}"
+            )
+            return False
 
         except Exception as e:
             logger.error(f"📱 发送QQ通知异常: {self._safe_str(e)}")
@@ -12333,11 +12303,9 @@ class XianyuLive:
             user_key = api_config.get("user_key")
             goods_id = api_config.get("goods_id")
             # 回调地址：优先使用卡券配置中的，如果没有则从全局配置读取，最后使用默认地址
-            callback_url = (
-                (api_config.get("callback_url") or "").strip()
-                or (YIFAN_API.get("callback_url") or "").strip()
-                or "http://116.196.116.76/yifan.php"
-            )
+            callback_url = (api_config.get("callback_url") or "").strip() or (
+                YIFAN_API.get("callback_url") or ""
+            ).strip()
             require_account = api_config.get("require_account", False)
 
             if not user_id or not user_key or not goods_id:
@@ -12406,7 +12374,10 @@ class XianyuLive:
                 await self.create_session()
 
             # 发起API请求（使用data而不是json，发送form格式）
-            api_url = "http://price.78shuk.top/dockapiv3/order/create"
+            api_url = (api_config.get("api_url") or "").strip()
+            if not api_url:
+                logger.error("亦凡API地址未配置，已跳过外部发货请求")
+                return None
 
             timeout_obj = aiohttp.ClientTimeout(total=30)
             async with self.session.post(
@@ -12435,12 +12406,11 @@ class XianyuLive:
                                 success_msg += f"商家订单号: {us_order_no}\n"
 
                             # 添加查询地址（从全局配置读取）
-                            query_url = YIFAN_API.get(
-                                "query_url", "http://116.196.116.76/yifan.php"
-                            )
-                            success_msg += f"\n🔍 查询卡密：\n"
-                            success_msg += f"{query_url}\n"
-                            success_msg += f"(输入订单号查询)\n"
+                            query_url = (YIFAN_API.get("query_url") or "").strip()
+                            if query_url:
+                                success_msg += f"\n🔍 查询卡密：\n"
+                                success_msg += f"{query_url}\n"
+                                success_msg += f"(输入订单号查询)\n"
 
                             # 添加提示信息
                             success_msg += f"\n⏰ 温馨提示：\n"
@@ -12574,7 +12544,10 @@ class XianyuLive:
                 await self.create_session()
 
             # 发起API请求（使用data而不是json，发送form格式）
-            api_url = "http://price.78shuk.top/dockapiv3/order/create"
+            api_url = (api_config.get("api_url") or "").strip()
+            if not api_url:
+                logger.error("亦凡API地址未配置，已跳过外部下单请求")
+                return None
 
             timeout_obj = aiohttp.ClientTimeout(total=30)
             async with self.session.post(
