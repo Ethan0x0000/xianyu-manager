@@ -151,6 +151,121 @@ async def _start_playwright_safe(cookie_id: str = "default"):
             asyncio.set_event_loop_policy(old_policy)
 
 
+# Cookie刷新用的跨域关键Cookie字段（需要同时注入 .goofish.com 和 .taobao.com）
+_CROSS_DOMAIN_COOKIE_FIELDS = frozenset(
+    {
+        "_m_h5_tk",
+        "_m_h5_tk_enc",
+        "cookie2",
+        "sgcookie",
+        "unb",
+        "t",
+        "cna",
+    }
+)
+
+
+def _build_browser_cookies_for_refresh(cookies_str: str) -> list:
+    """将cookie字符串解析为Playwright可用的cookie列表，关键字段同时注入 .goofish.com 和 .taobao.com"""
+    cookies = []
+    for cookie_pair in cookies_str.split("; "):
+        if "=" not in cookie_pair:
+            continue
+        name, value = cookie_pair.split("=", 1)
+        name = name.strip()
+        value = value.strip()
+        if not name:
+            continue
+        cookies.append(
+            {"name": name, "value": value, "domain": ".goofish.com", "path": "/"}
+        )
+        if name in _CROSS_DOMAIN_COOKIE_FIELDS:
+            cookies.append(
+                {"name": name, "value": value, "domain": ".taobao.com", "path": "/"}
+            )
+    return cookies
+
+
+def _get_cookie_refresh_stealth_script() -> str:
+    """获取Cookie刷新专用的轻量反检测脚本
+
+    只保留最关键的反自动化检测措施，避免影响页面正常运行。
+    """
+    return """
+        // === 核心反检测：隐藏 webdriver 标志 ===
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        try { delete navigator.__proto__.webdriver; } catch(e) {}
+
+        // === Playwright 痕迹清理 ===
+        delete window.playwright;
+        delete window.__playwright;
+        delete window.__pw_manual;
+        delete window.__pw_original;
+        delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
+        delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
+        delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
+        delete window._selenium;
+        delete window._phantom;
+        delete window.callPhantom;
+        delete window.phantom;
+        delete window.Buffer;
+        delete window.emit;
+        delete window.spawn;
+        Object.defineProperty(navigator, '__webdriver_script_fn', { get: () => undefined });
+        Object.defineProperty(navigator, '__webdriver_evaluate', { get: () => undefined });
+        Object.defineProperty(navigator, '__driver_evaluate', { get: () => undefined });
+
+        // === 基本指纹伪装 ===
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => Array.from({length: 5}, (_, i) => ({name: 'Plugin' + i, description: 'Plugin ' + i})),
+        });
+        Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en'] });
+        Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
+        Object.defineProperty(navigator, 'vendor', { get: () => 'Google Inc.' });
+        Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+        Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
+        Object.defineProperty(navigator, 'maxTouchPoints', { get: () => 0 });
+        Object.defineProperty(navigator, 'headless', { get: () => undefined });
+
+        // === chrome 对象伪装 ===
+        if (!window.chrome) {
+            window.chrome = { runtime: {}, loadTimes: function(){}, csi: function(){} };
+        }
+
+        // === 权限API伪装 ===
+        if (navigator.permissions) {
+            const originalQuery = navigator.permissions.query;
+            navigator.permissions.query = function(parameters) {
+                if (parameters.name === 'notifications') {
+                    return Promise.resolve({ state: Notification.permission });
+                }
+                return originalQuery.call(this, parameters);
+            };
+        }
+    """
+
+
+def _check_page_is_logged_in(current_url: str, page_title: str) -> bool:
+    """检查页面是否处于已登录状态（未被重定向到登录页）"""
+    url_lower = current_url.lower() if current_url else ""
+    # 登录页特征检测
+    login_indicators = [
+        "passport.goofish.com",
+        "login.taobao.com",
+        "mini_login",
+        "/iv/",  # 验证页
+    ]
+    for indicator in login_indicators:
+        if indicator in url_lower:
+            return False
+    # 标题检测
+    if page_title:
+        title_lower = page_title.lower()
+        if any(kw in title_lower for kw in ["登录", "login", "验证"]):
+            return False
+    return True
+
+
 class ConnectionState(Enum):
     """WebSocket连接状态枚举"""
 
@@ -13386,7 +13501,7 @@ class XianyuLive:
             if not playwright:
                 return False
 
-            # 启动浏览器（参照商品搜索的配置）
+            # 启动浏览器（参照商品搜索的配置 + 反检测增强）
             browser_args = [
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
@@ -13408,13 +13523,14 @@ class XianyuLive:
                 "--mute-audio",
                 "--no-default-browser-check",
                 "--no-pings",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
             ]
 
-            # 在Docker环境中添加额外参数
+            # 在Docker环境中添加额外参数（注意：不再包含 --enable-automation）
             if os.getenv("DOCKER_ENV"):
                 browser_args.extend(
                     [
-                        # '--single-process',  # 注释掉，避免多用户并发时的进程冲突和资源泄漏
                         "--disable-background-networking",
                         "--disable-client-side-phishing-detection",
                         "--disable-hang-monitor",
@@ -13423,7 +13539,6 @@ class XianyuLive:
                         "--disable-web-resources",
                         "--metrics-recording-only",
                         "--safebrowsing-disable-auto-update",
-                        "--enable-automation",
                         "--password-store=basic",
                         "--use-mock-keychain",
                     ]
@@ -13431,13 +13546,14 @@ class XianyuLive:
 
             # 使用无头浏览器
             browser = await playwright.chromium.launch(
-                headless=True,  # 改回无头模式
+                headless=True,
                 args=browser_args,
             )
 
             # 创建浏览器上下文
             context_options = {
-                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+                "ignore_https_errors": True,
             }
 
             # 使用标准窗口大小
@@ -13445,19 +13561,11 @@ class XianyuLive:
 
             context = await browser.new_context(**context_options)
 
-            # 设置扫码登录获取的Cookie
-            cookies = []
-            for cookie_pair in qr_cookies_str.split("; "):
-                if "=" in cookie_pair:
-                    name, value = cookie_pair.split("=", 1)
-                    cookies.append(
-                        {
-                            "name": name.strip(),
-                            "value": value.strip(),
-                            "domain": ".goofish.com",
-                            "path": "/",
-                        }
-                    )
+            # 注入反检测脚本
+            context.add_init_script(_get_cookie_refresh_stealth_script())
+
+            # 设置扫码登录获取的Cookie（关键字段同时注入 .goofish.com 和 .taobao.com 域）
+            cookies = _build_browser_cookies_for_refresh(qr_cookies_str)
 
             await context.add_cookies(cookies)
             logger.info(
@@ -13877,7 +13985,7 @@ class XianyuLive:
             if not playwright:
                 return False
 
-            # 启动浏览器（参照商品搜索的配置）
+            # 启动浏览器（参照商品搜索的配置 + 反检测增强）
             browser_args = [
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
@@ -13899,9 +14007,11 @@ class XianyuLive:
                 "--mute-audio",
                 "--no-default-browser-check",
                 "--no-pings",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
             ]
 
-            # 在Docker环境中添加额外参数
+            # 在Docker环境中添加额外参数（注意：不再包含 --enable-automation）
             if os.getenv("DOCKER_ENV"):
                 browser_args.extend(
                     [
@@ -13913,7 +14023,6 @@ class XianyuLive:
                         "--disable-web-resources",
                         "--metrics-recording-only",
                         "--safebrowsing-disable-auto-update",
-                        "--enable-automation",
                         "--password-store=basic",
                         "--use-mock-keychain",
                     ]
@@ -13924,7 +14033,8 @@ class XianyuLive:
 
             # 创建浏览器上下文
             context_options = {
-                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+                "ignore_https_errors": True,
             }
 
             # 使用标准窗口大小
@@ -13932,23 +14042,15 @@ class XianyuLive:
 
             context = await browser.new_context(**context_options)
 
-            # 设置当前的Cookie
-            cookies = []
-            for cookie_pair in current_cookies_str.split("; "):
-                if "=" in cookie_pair:
-                    name, value = cookie_pair.split("=", 1)
-                    cookies.append(
-                        {
-                            "name": name.strip(),
-                            "value": value.strip(),
-                            "domain": ".goofish.com",
-                            "path": "/",
-                        }
-                    )
+            # 注入反检测脚本
+            context.add_init_script(_get_cookie_refresh_stealth_script())
+
+            # 设置当前的Cookie（关键字段同时注入 .goofish.com 和 .taobao.com 域）
+            cookies = _build_browser_cookies_for_refresh(current_cookies_str)
 
             await context.add_cookies(cookies)
             logger.info(
-                f"【{self.cookie_id}】已设置 {len(cookies)} 个当前Cookie到浏览器"
+                f"【{self.cookie_id}】已设置 {len(cookies)} 个当前Cookie到浏览器（含跨域）"
             )
 
             # 创建页面
@@ -14212,7 +14314,7 @@ class XianyuLive:
             if not playwright:
                 return False
 
-            # 启动浏览器（参照商品搜索的配置）
+            # 启动浏览器（参照商品搜索的配置 + 反检测增强）
             browser_args = [
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
@@ -14234,13 +14336,14 @@ class XianyuLive:
                 "--mute-audio",
                 "--no-default-browser-check",
                 "--no-pings",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
             ]
 
-            # 在Docker环境中添加额外参数
+            # 在Docker环境中添加额外参数（注意：不再包含 --enable-automation）
             if os.getenv("DOCKER_ENV"):
                 browser_args.extend(
                     [
-                        # '--single-process',  # 注释掉，避免多用户并发时的进程冲突和资源泄漏
                         "--disable-background-networking",
                         "--disable-client-side-phishing-detection",
                         "--disable-hang-monitor",
@@ -14249,7 +14352,6 @@ class XianyuLive:
                         "--disable-web-resources",
                         "--metrics-recording-only",
                         "--safebrowsing-disable-auto-update",
-                        "--enable-automation",
                         "--password-store=basic",
                         "--use-mock-keychain",
                     ]
@@ -14260,7 +14362,8 @@ class XianyuLive:
 
             # 创建浏览器上下文
             context_options = {
-                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+                "ignore_https_errors": True,
             }
 
             # 使用标准窗口大小
@@ -14268,22 +14371,17 @@ class XianyuLive:
 
             context = await browser.new_context(**context_options)
 
-            # 设置当前Cookie
-            cookies = []
-            for cookie_pair in self.cookies_str.split("; "):
-                if "=" in cookie_pair:
-                    name, value = cookie_pair.split("=", 1)
-                    cookies.append(
-                        {
-                            "name": name.strip(),
-                            "value": value.strip(),
-                            "domain": ".goofish.com",
-                            "path": "/",
-                        }
-                    )
+            # 注入反检测脚本（防止被闲鱼检测为自动化浏览器）
+            context.add_init_script(_get_cookie_refresh_stealth_script())
+            logger.info(f"【{self.cookie_id}】已注入反检测脚本")
+
+            # 设置当前Cookie（关键字段同时注入 .goofish.com 和 .taobao.com 域）
+            cookies = _build_browser_cookies_for_refresh(self.cookies_str)
 
             await context.add_cookies(cookies)
-            logger.info(f"【{self.cookie_id}】已设置 {len(cookies)} 个Cookie到浏览器")
+            logger.info(
+                f"【{self.cookie_id}】已设置 {len(cookies)} 个Cookie到浏览器（含跨域）"
+            )
 
             # 创建页面
             page = await context.new_page()
@@ -14291,7 +14389,22 @@ class XianyuLive:
             # 等待页面准备
             await asyncio.sleep(0.1)
 
-            # 访问指定页面
+            # 预访问首页建立正常浏览历史，降低风控检测
+            try:
+                logger.info(f"【{self.cookie_id}】预访问闲鱼首页...")
+                await page.goto(
+                    "https://www.goofish.com",
+                    wait_until="domcontentloaded",
+                    timeout=12000,
+                )
+                await asyncio.sleep(1)
+                logger.info(f"【{self.cookie_id}】首页预访问完成")
+            except Exception as warmup_e:
+                logger.warning(
+                    f"【{self.cookie_id}】首页预访问失败（不影响后续）: {self._safe_str(warmup_e)}"
+                )
+
+            # 访问目标页面
             target_url = "https://www.goofish.com/im"
             logger.info(f"【{self.cookie_id}】访问页面: {target_url}")
 
@@ -14318,6 +14431,16 @@ class XianyuLive:
                         logger.info(f"【{self.cookie_id}】页面访问成功（最基本策略）")
                 else:
                     raise e
+
+            # 导航后校验页面状态：检查是否被重定向到登录页
+            await asyncio.sleep(1)
+            current_url = page.url
+            page_title = await page.title()
+            if not _check_page_is_logged_in(current_url, page_title):
+                logger.warning(
+                    f"【{self.cookie_id}】⚠️ 页面被重定向到登录/验证页，Cookie可能已失效。URL: {current_url}, 标题: {page_title}"
+                )
+                return False
 
             # Cookie刷新模式：执行两次刷新
             logger.info(f"【{self.cookie_id}】页面加载完成，开始刷新...")
