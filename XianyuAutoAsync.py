@@ -6218,18 +6218,33 @@ class XianyuLive:
         return (time.time() - self.last_slider_success_at) <= window
 
     async def preflight_token_after_manual_refresh(self) -> str:
-        """手动刷新成功后的 token 预检，确认新实例可直接完成初始化。"""
+        """手动刷新成功后的 token 预检，确认新实例可直接完成初始化。
+
+        🔧 增加重试机制：密码登录获取的 Cookie 可能需要短暂时间在服务端生效，
+        首次 Token 刷新可能因 session 未就绪而失败，等待后重试可提高成功率。
+        """
         logger.info(f"【{self.cookie_id}】开始执行手动刷新后的Token预检...")
         self.last_message_received_time = 0
-        token = await self.refresh_token(allow_password_login_recovery=False)
-        if token:
-            self.cache_auth_prewarmed_token(
-                self.cookie_id, token, source="manual_refresh_handoff"
-            )
-            logger.info(
-                f"【{self.cookie_id}】手动刷新后的Token预检成功，已缓存预热token供新实例复用"
-            )
-            return token
+
+        max_preflight_retries = 3
+        for attempt in range(1, max_preflight_retries + 1):
+            token = await self.refresh_token(allow_password_login_recovery=False)
+            if token:
+                self.cache_auth_prewarmed_token(
+                    self.cookie_id, token, source="manual_refresh_handoff"
+                )
+                logger.info(
+                    f"【{self.cookie_id}】手动刷新后的Token预检成功（第{attempt}次），已缓存预热token供新实例复用"
+                )
+                return token
+
+            if attempt < max_preflight_retries:
+                wait_secs = 2.0 * attempt
+                logger.warning(
+                    f"【{self.cookie_id}】Token预检第{attempt}次失败（状态: {self.last_token_refresh_status}），"
+                    f"等待{wait_secs:.0f}秒后重试（Cookie可能尚未在服务端生效）"
+                )
+                await asyncio.sleep(wait_secs)
 
         raise InitAuthError(
             f"手动刷新后的Token预检失败，状态: {self.last_token_refresh_status or 'unknown'}"
@@ -7721,7 +7736,7 @@ class XianyuLive:
             import asyncio
 
             slider = XianyuSliderStealth(
-                user_id=self.cookie_id, enable_learning=False, headless=not show_browser
+                user_id=self.cookie_id, enable_learning=True, headless=not show_browser
             )
             slider.risk_session_id = risk_session_id
             slider.risk_trigger_scene = trigger_scene
@@ -7731,6 +7746,7 @@ class XianyuLive:
                 password=password,
                 show_browser=show_browser,
                 notification_callback=notification_callback_wrapper,
+                force_clean_context=True,
             )
 
             if result:
