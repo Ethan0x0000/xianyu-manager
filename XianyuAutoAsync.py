@@ -447,6 +447,19 @@ class XianyuLive:
     _init_auth_failure_threshold = 3
     _init_auth_cooldown = 60
 
+    # 跨实例防抖回复去重：防止同一账号的多个 XianyuLive 实例（因重连未完全清理残留）
+    # 对同一条消息各自独立触发回复，导致双重回复。
+    # 键: "cookie_id:chat_id:message_id"  值: timestamp
+    _cls_debounce_reply_dedup = {}
+    _cls_debounce_reply_dedup_lock = None  # asyncio.Lock, lazy-init (需在事件循环内创建)
+
+    @classmethod
+    def _get_debounce_reply_dedup_lock(cls):
+        """延迟初始化跨实例防抖回复去重锁（必须在事件循环内调用）"""
+        if cls._cls_debounce_reply_dedup_lock is None:
+            cls._cls_debounce_reply_dedup_lock = asyncio.Lock()
+        return cls._cls_debounce_reply_dedup_lock
+
     # 扫码登录token预热缓存，避免扫码成功后正式任务立即再次刷新token
     _qr_prewarmed_tokens = {}  # {cookie_id: {'token': str, 'timestamp': float}}
     _qr_prewarmed_token_ttl = 180  # 秒
@@ -15690,6 +15703,30 @@ class XianyuLive:
                     # 注意：消息级去重已在 handle_message 调用 _schedule_debounced_reply 之前完成
                     # 此处不再重复调用 _mark_message_processed_if_new，避免因提前标记导致
                     # 防抖机制中唯一的合法处理被误判为"已处理"而跳过
+
+                    # 跨实例防抖回复去重：当同一账号因重连残留存在多个 XianyuLive 实例时，
+                    # 每个实例各自持有独立的 message_debounce_tasks，无法互相取消对方的防抖任务。
+                    # 使用类级别的去重字典做最终屏障，确保同一条消息只触发一次回复。
+                    reply_dedup_key = f"{self.cookie_id}:{chat_id}:{last_msg.get('message_id', '')}"
+                    dedup_lock = XianyuLive._get_debounce_reply_dedup_lock()
+                    async with dedup_lock:
+                        now_ts = time.time()
+                        if reply_dedup_key in XianyuLive._cls_debounce_reply_dedup:
+                            elapsed = now_ts - XianyuLive._cls_debounce_reply_dedup[reply_dedup_key]
+                            if elapsed < 10:
+                                logger.warning(
+                                    f"【{self.cookie_id}】chat_id {chat_id} 跨实例防抖去重命中(间隔{elapsed:.3f}s)，跳过重复回复"
+                                )
+                                return
+                        XianyuLive._cls_debounce_reply_dedup[reply_dedup_key] = now_ts
+                        # 惰性清理过期条目，防止内存泄漏
+                        if len(XianyuLive._cls_debounce_reply_dedup) > 5000:
+                            expired_keys = [
+                                k for k, v in XianyuLive._cls_debounce_reply_dedup.items()
+                                if now_ts - v > 60
+                            ]
+                            for k in expired_keys:
+                                del XianyuLive._cls_debounce_reply_dedup[k]
 
                     # 处理最后一条消息
                     logger.info(
