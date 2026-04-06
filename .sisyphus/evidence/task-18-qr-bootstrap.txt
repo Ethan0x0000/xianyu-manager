@@ -1,8 +1,0 @@
-Command:
-python -c "from app.services.login_service import LoginService; service = LoginService(); session = service.create_qr_session(); print('session_id=' + session.session_id); print('qr_code_url=' + session.qr_code_url); print('status=' + session.status); print('is_expired=' + str(session.is_expired))"
-
-Output:
-session_id=64aac1d8-2647-44d4-8170-f5da990ef3e7
-qr_code_url=https://oauth.m.taobao.com/login/qr/code?sessionId=64aac1d8-2647-44d4-8170-f5da990ef3e7
-status=pending
-is_expired=False

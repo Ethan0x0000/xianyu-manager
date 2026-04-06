@@ -1,5 +1,0 @@
-Command:
-python -c "from app.services.item_polish import ItemPolishService; print(ItemPolishService.__name__)"
-
-Output:
-ItemPolishService
