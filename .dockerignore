@@ -39,6 +39,7 @@ data/
 # Test files
 test_*.py
 *_test.py
+tests/
 
 # Environment / secrets
 .env
