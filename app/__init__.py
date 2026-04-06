@@ -1,5 +1,5 @@
 """
-Xianyu Auto-Reply Application Package
+Xianyu Manager Application Package
 
 This package contains the refactored application modules organized by domain:
 - protocol: WebSocket and Goofish signing protocol wrappers

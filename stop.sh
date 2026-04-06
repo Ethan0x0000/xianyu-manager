@@ -1,7 +1,7 @@
 #!/bin/bash
-# 闲鱼自动回复系统停止脚本
+# 闲鱼管理系统停止脚本
 
-echo "正在停止闲鱼自动回复系统..."
+echo "正在停止闲鱼管理系统..."
 
 if pgrep -f "Start.py" > /dev/null; then
     pkill -f "Start.py"

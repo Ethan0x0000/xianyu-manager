@@ -1,6 +1,6 @@
 """Application entry point.
 
-Starts the Xianyu Auto-Reply System using the new modular architecture.
+Starts Xianyu Manager using the new modular architecture.
 """
 
 from __future__ import annotations

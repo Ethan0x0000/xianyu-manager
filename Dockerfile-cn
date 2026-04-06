@@ -6,9 +6,9 @@ FROM ${BASE_IMAGE}
 
 # 设置标签信息
 LABEL maintainer="GuDong2003"
-LABEL version="2.0.0"
+LABEL version="0.1.0"
 LABEL description="闲鱼管理系统 - 单管理员多账号自动化管理"
-LABEL repository="https://github.com/GuDong2003/xianyu-auto-reply-fix"
+LABEL repository="https://github.com/Ethan0x0000/xianyu-manager"
 LABEL license="仅供学习与研究使用，禁止商业用途"
 LABEL author="GuDong2003"
 LABEL build-date=""

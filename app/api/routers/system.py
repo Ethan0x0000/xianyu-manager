@@ -15,7 +15,7 @@ router = APIRouter(prefix="", tags=["system"])
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check() -> HealthResponse:
-    return HealthResponse(status="healthy", version="2.0")
+    return HealthResponse(status="healthy", version="0.1.0")
 
 
 @router.get("/api/settings", response_model=SettingsResponse)

@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         闲鱼聊天暗色模式
-// @namespace    https://github.com/xianyu-auto-reply
-// @version      2.0.0
+// @namespace    https://github.com/Ethan0x0000/xianyu-manager
+// @version      0.1.0
 // @description  为闲鱼聊天页面添加暗色模式支持
-// @author       XianyuAutoReply
+// @author       XianyuManager
 // @match        https://www.goofish.com/im*
 // @match        https://www.goofish.com/personal*
 // @match        https://goofish.com/im*
@@ -31,7 +31,7 @@
 
     // 简洁的暗色配色 - 参考 macOS/Discord 风格
     const darkModeCSS = `
-        /* ==================== 闲鱼聊天暗色模式 v2.0 ==================== */
+        /* ==================== 闲鱼聊天暗色模式 v0.1.0 ==================== */
 
         /* CSS 变量定义 */
         :root {
@@ -387,7 +387,7 @@
     function injectDarkMode() {
         if (getDarkModeSetting()) {
             GM_addStyle(darkModeCSS);
-            console.log('[闲鱼暗色模式] v2.0 已启用');
+console.log('[闲鱼暗色模式] v0.1.0 已启用');
         }
     }
 

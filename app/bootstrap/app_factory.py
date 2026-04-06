@@ -96,9 +96,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await runtime_supervisor.stop()
 
     app = FastAPI(
-        title="Xianyu Auto-Reply System",
-        description="Single-admin Xianyu automation system",
-        version="2.0.0",
+        title="Xianyu Manager",
+        description="Single-admin Xianyu management system",
+        version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,

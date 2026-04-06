@@ -3,8 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: xianyu-auto-reply-fix:latest
-    container_name: xianyu-auto-reply-fix
+    image: xianyu-manager:latest
+    container_name: xianyu-manager
     restart: unless-stopped
     user: "0:0"
     entrypoint: ["/bin/bash", "-c", "dos2unix /app/entrypoint.sh 2>/dev/null || true; bash /app/entrypoint.sh"]

@@ -1,4 +1,4 @@
-# 闲鱼管理系统 v2.0
+# 闲鱼管理系统 v0.1.0
 
 ## 概述
 单管理员 + 多闲鱼账号的自动化管理系统。支持自动回复、智能 AI 回复、自动发货、商品擦亮、自动确认发货。
@@ -27,8 +27,8 @@
 
 ### 本地运行
 ```bash
-git clone https://github.com/GuDong2003/xianyu-auto-reply-fix.git
-cd xianyu-auto-reply-fix
+git clone https://github.com/Ethan0x0000/xianyu-manager.git
+cd xianyu-manager
 python -m venv venv
 venv\Scripts\activate  # Windows
 pip install -r requirements.txt
