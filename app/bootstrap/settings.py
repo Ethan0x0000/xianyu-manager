@@ -35,7 +35,7 @@ class Settings:
     """
 
     # Server configuration
-    api_host: str = "0.0.0.0"
+    api_host: str = "[::]"
     api_port: int = 8848
 
     # Database

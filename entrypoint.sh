@@ -153,7 +153,7 @@ fi
 echo "========================================"
 echo "  系统启动参数："
 echo "  - API端口: ${API_PORT:-8848}"
-echo "  - API主机: ${API_HOST:-0.0.0.0}"
+echo "  - API主机: ${API_HOST:-[::]}"
 echo "  - Debug模式: ${DEBUG:-false}"
 echo "  - 自动重载: ${RELOAD:-false}"
 echo "  - 虚拟显示: ${USE_XVFB:-false}"

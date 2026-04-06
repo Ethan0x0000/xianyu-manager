@@ -99,7 +99,7 @@ class SettingsDefaultsTests(unittest.TestCase):
     def test_settings_dataclass_has_correct_default_values(self) -> None:
         settings = Settings()
 
-        self.assertEqual("0.0.0.0", settings.api_host)
+        self.assertEqual("[::]", settings.api_host)
         self.assertEqual(8848, settings.api_port)
         self.assertEqual("data/xianyu_data.db", settings.db_path)
         self.assertEqual("admin", settings.admin_username)
