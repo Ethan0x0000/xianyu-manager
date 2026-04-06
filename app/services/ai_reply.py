@@ -95,6 +95,33 @@ class AIReplyService:
         )
         return ""
 
+    async def test_connection(
+        self,
+        *,
+        provider_type: str,
+        api_key: str = "",
+        base_url: str = "",
+        model_name: str = "",
+        system_prompt: str = "",
+        max_tokens: int = 512,
+        enabled: bool = False,
+    ) -> tuple[bool, str]:
+        """Validate the current AI configuration without calling providers yet."""
+        del base_url, model_name, system_prompt, max_tokens
+
+        try:
+            provider = self.resolve_provider(provider_type)
+        except UnsupportedProviderError as exc:
+            return (False, str(exc))
+
+        if provider == AIProvider.DISABLED or not enabled:
+            return (True, "AI replies are disabled")
+
+        if not api_key.strip():
+            return (False, "API key is required")
+
+        return (True, f"{provider.value} configuration looks valid")
+
     def get_conversation_context(
         self, session_key: str, limit: int = 10
     ) -> list[dict[str, str]]:

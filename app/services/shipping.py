@@ -5,6 +5,7 @@ Handles retained local delivery modes only:
 - batch_data: Send from a batch/pool of data
 - api_card: Send via a configured API endpoint
 - image: Send image file
+- yifan: Send via cleaned Yifan vendor configuration
 
 Excluded: legacy external vendor integrations, comment-based delivery flows,
 and hardcoded third-party hosts.
@@ -26,6 +27,7 @@ class DeliveryMode(enum.Enum):
     BATCH_DATA = "batch_data"
     API_CARD = "api_card"
     IMAGE = "image"
+    YIFAN = "yifan"
     UNKNOWN = "unknown"
 
 
@@ -36,6 +38,7 @@ _MODE_ALIASES: dict[str, DeliveryMode] = {
     "api": DeliveryMode.API_CARD,
     "api_card": DeliveryMode.API_CARD,
     "image": DeliveryMode.IMAGE,
+    "yifan": DeliveryMode.YIFAN,
 }
 
 

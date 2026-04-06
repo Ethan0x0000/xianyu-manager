@@ -83,6 +83,7 @@ class TestShippingService(unittest.TestCase):
             "data": DeliveryMode.BATCH_DATA,
             "api": DeliveryMode.API_CARD,
             "image": DeliveryMode.IMAGE,
+            "yifan": DeliveryMode.YIFAN,
         }
 
         for content_type, expected_mode in cases.items():
@@ -129,6 +130,7 @@ class TestShippingService(unittest.TestCase):
                 "BATCH_DATA": "batch_data",
                 "API_CARD": "api_card",
                 "IMAGE": "image",
+                "YIFAN": "yifan",
                 "UNKNOWN": "unknown",
             },
         )

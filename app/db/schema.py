@@ -143,7 +143,7 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     CREATE TABLE IF NOT EXISTS delivery_cards (
         id INTEGER PRIMARY KEY,
         name TEXT NOT NULL,
-        content_type TEXT NOT NULL CHECK (content_type IN ('text', 'data', 'api', 'image')),
+        content_type TEXT NOT NULL CHECK (content_type IN ('text', 'data', 'api', 'image', 'yifan')),
         content TEXT NOT NULL DEFAULT '',
         account_id TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -206,9 +206,50 @@ def _ensure_account_compat_columns(conn: sqlite3.Connection) -> None:
         )
 
 
+def _ensure_yifan_content_type(conn: sqlite3.Connection) -> None:
+    row = cast(
+        tuple[str | None] | None,
+        conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'delivery_cards'"
+        ).fetchone(),
+    )
+    create_sql = str(row[0] or "") if row is not None else ""
+    if "'yifan'" in create_sql:
+        return
+
+    conn.commit()
+    _ = conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        _ = conn.execute(
+            """
+            CREATE TABLE delivery_cards_new (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                content_type TEXT NOT NULL CHECK (content_type IN ('text', 'data', 'api', 'image', 'yifan')),
+                content TEXT NOT NULL DEFAULT '',
+                account_id TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        _ = conn.execute(
+            """
+            INSERT INTO delivery_cards_new (id, name, content_type, content, account_id, created_at)
+            SELECT id, name, content_type, content, account_id, created_at
+            FROM delivery_cards
+            """
+        )
+        _ = conn.execute("DROP TABLE delivery_cards")
+        _ = conn.execute("ALTER TABLE delivery_cards_new RENAME TO delivery_cards")
+        conn.commit()
+    finally:
+        _ = conn.execute("PRAGMA foreign_keys=ON")
+
+
 def initialize_database(db_path: str) -> None:
     """Create the fresh single-admin schema."""
     with get_db(db_path) as conn:
         for statement in SCHEMA_STATEMENTS:
             _ = conn.execute(statement)
         _ensure_account_compat_columns(conn)
+        _ensure_yifan_content_type(conn)

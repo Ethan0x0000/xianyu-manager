@@ -152,6 +152,13 @@ class KeywordCreateRequest(BaseModel):
     enabled: bool = True
 
 
+class KeywordUpdateRequest(BaseModel):
+    pattern: str = Field(min_length=1)
+    reply_content: str
+    is_regex: bool = False
+    enabled: bool = True
+
+
 class KeywordResponse(BaseModel):
     id: int
     pattern: str
@@ -160,6 +167,85 @@ class KeywordResponse(BaseModel):
     is_regex: bool = False
     enabled: bool = True
     scope: str = "general"
+
+
+class KeywordImportRequest(BaseModel):
+    pattern: str = Field(min_length=1)
+    reply_content: str = Field(min_length=1)
+    item_id: str | None = None
+    is_regex: bool = False
+    enabled: bool = True
+
+
+class KeywordImportResponse(BaseModel):
+    imported: int
+
+
+class KeywordExportResponse(BaseModel):
+    keywords: list[KeywordResponse]
+    item_keywords: list[KeywordResponse]
+
+
+class DefaultReplyCreateRequest(BaseModel):
+    content: str = Field(min_length=1)
+    enabled: bool = True
+
+
+class DefaultReplyUpdateRequest(BaseModel):
+    content: str = Field(min_length=1)
+    enabled: bool = True
+
+
+class DefaultReplyResponse(BaseModel):
+    id: int
+    content: str
+    enabled: bool = True
+    created_at: str | None = None
+
+
+class ItemReplyCreateRequest(BaseModel):
+    item_id: str = Field(min_length=1)
+    reply_content: str
+    enabled: bool = True
+
+
+class ItemReplyUpdateRequest(BaseModel):
+    item_id: str = Field(min_length=1)
+    reply_content: str
+    enabled: bool = True
+
+
+class ItemReplyResponse(BaseModel):
+    id: int
+    item_id: str
+    reply_content: str
+    enabled: bool = True
+
+
+class AISettingsUpsertRequest(BaseModel):
+    provider_type: str = Field(min_length=1)
+    api_key: str | None = None
+    base_url: str | None = None
+    model_name: str | None = None
+    system_prompt: str | None = None
+    max_tokens: int | None = Field(default=None, ge=1)
+    enabled: bool | None = None
+
+
+class AISettingsResponse(BaseModel):
+    id: int
+    provider_type: str
+    api_key: str = ""
+    base_url: str = ""
+    model_name: str = ""
+    system_prompt: str = ""
+    max_tokens: int = 512
+    enabled: bool = False
+
+
+class AITestResponse(BaseModel):
+    success: bool
+    message: str
 
 
 class RuntimeAccountResponse(BaseModel):
@@ -187,10 +273,23 @@ __all__ = [
     "AccountRemarkUpdateRequest",
     "AccountResponse",
     "AccountStatusUpdateRequest",
+    "AITestResponse",
+    "AISettingsResponse",
+    "AISettingsUpsertRequest",
     "DeleteResponse",
+    "DefaultReplyCreateRequest",
+    "DefaultReplyResponse",
+    "DefaultReplyUpdateRequest",
     "HealthResponse",
+    "ItemReplyCreateRequest",
+    "ItemReplyResponse",
+    "ItemReplyUpdateRequest",
     "KeywordCreateRequest",
+    "KeywordExportResponse",
+    "KeywordImportRequest",
+    "KeywordImportResponse",
     "KeywordResponse",
+    "KeywordUpdateRequest",
     "LoginInfoStatusResponse",
     "LoginRequest",
     "LoginResponse",

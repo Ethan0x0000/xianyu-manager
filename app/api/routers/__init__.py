@@ -6,11 +6,13 @@ from typing import cast
 from fastapi import APIRouter, FastAPI
 
 from .accounts import router as accounts_router
+from .ai_settings import router as ai_settings_router
 from .auth import legacy_router as legacy_auth_router, router as auth_router
 from .items import router as items_router
+from .orders import orders_router
 from .replies import keywords_router, router as replies_router
 from .runtime import router as runtime_router
-from .shipping import delivery_router, router as shipping_router
+from .shipping import cards_router, delivery_router, router as shipping_router
 from .stream import router as stream_router
 from .system import router as system_router
 from .uploads import router as uploads_router
@@ -26,11 +28,14 @@ ROUTERS = (
     legacy_auth_router,
     account_compat_router,
     accounts_router,
+    ai_settings_router,
     replies_router,
     keywords_router,
     shipping_router,
     delivery_router,
+    cards_router,
     items_router,
+    orders_router,
     runtime_router,
     uploads_router,
     stream_router,
