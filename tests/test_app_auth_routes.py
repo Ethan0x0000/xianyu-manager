@@ -23,7 +23,7 @@ class AppAuthRouteTests(unittest.TestCase):
         response = client.get("/login.html", follow_redirects=False)
 
         self.assertEqual(307, response.status_code)
-        self.assertEqual("/static/login.html", response.headers["location"])
+        self.assertEqual("/static/index.html", response.headers["location"])
 
     def test_login_info_status_enabled_for_default_admin_credentials(self) -> None:
         client = self._make_client()

@@ -35,10 +35,10 @@ ROUTERS = (
     delivery_router,
     cards_router,
     items_router,
+    stream_router,  # stream_router MUST be before orders_router (avoids /orders/stream matching /{order_id})
     orders_router,
     runtime_router,
     uploads_router,
-    stream_router,
 )
 
 

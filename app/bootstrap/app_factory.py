@@ -119,10 +119,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     async def root_redirect() -> RedirectResponse:
-        return RedirectResponse(url="/static/login.html")
+        # React SPA entry: serves static/index.html which handles /login route
+        return RedirectResponse(url="/static/index.html")
 
     async def login_redirect() -> RedirectResponse:
-        return RedirectResponse(url="/static/login.html")
+        return RedirectResponse(url="/static/index.html")
 
     async def admin_redirect() -> RedirectResponse:
         return RedirectResponse(url="/static/index.html")
