@@ -6,10 +6,12 @@ import shutil
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import override
 
 from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from starlette.types import Scope
 
 from app.api.routers import register_routers
 from app.bootstrap.runtime import RuntimeSupervisor
@@ -27,6 +29,22 @@ from app.services.shipping import ShippingService
 from app.shared.types import DEFAULT_DB_PATH, ServiceKey
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+class SPAStaticFiles(StaticFiles):
+    """Static-files mount with SPA fallback.
+
+    When a requested path does not correspond to an existing file, serves
+    ``index.html`` so that the React SPA router can handle the URL.
+    """
+
+    @override
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        try:
+            return await super().get_response(path, scope)
+        except Exception:
+            # File not found – return the SPA entry point
+            return await super().get_response("index.html", scope)
 
 
 def _resolve_project_path(path_value: str) -> Path:
@@ -115,22 +133,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.upload_dir = upload_dir
     register_routers(app)
 
+    # Serve uploaded files and other operational assets under /static/
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-    async def root_redirect() -> RedirectResponse:
-        # React SPA entry: serves static/index.html which handles /login route
-        return RedirectResponse(url="/static/index.html")
-
-    async def login_redirect() -> RedirectResponse:
-        return RedirectResponse(url="/static/index.html")
-
-    async def admin_redirect() -> RedirectResponse:
-        return RedirectResponse(url="/static/index.html")
-
-    app.add_api_route("/", root_redirect, include_in_schema=False)
-    app.add_api_route("/login.html", login_redirect, include_in_schema=False)
-    app.add_api_route("/admin", admin_redirect, include_in_schema=False)
+    # SPA mount: Vite build output lives in static_dir; the SPAStaticFiles
+    # class returns index.html for any path that doesn't match a real file,
+    # so the React router handles client-side URLs like /login, /dashboard.
+    if (static_dir / "index.html").exists():
+        app.mount(
+            "/",
+            SPAStaticFiles(directory=str(static_dir), html=True),
+            name="spa",
+        )
 
     return app
 

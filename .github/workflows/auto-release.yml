@@ -22,9 +22,9 @@ jobs:
         id: version
         shell: bash
         run: |
-          tag="$(tr -d '\r\n' < static/version.txt)"
+          tag="$(tr -d '\r\n' < version.txt)"
           if [[ -z "$tag" ]]; then
-            echo "static/version.txt is empty" >&2
+            echo "version.txt is empty" >&2
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"

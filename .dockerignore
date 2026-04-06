@@ -61,6 +61,11 @@ backups/
 browser_data/
 trajectory_history/
 
+# Frontend build artifacts (built during docker build)
+frontend/node_modules/
+static/index.html
+static/assets/
+
 # Uploads
 static/uploads/*
 !static/uploads/.gitkeep
