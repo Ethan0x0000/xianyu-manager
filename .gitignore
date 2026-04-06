@@ -103,6 +103,7 @@ nuitka-crash-report*.xml
 # Docker override
 docker-compose.override.yml
 
-# Misc
-opencode.json
-.sisyphus/
+# Cache and lock files
+*.lock
+*.cache
+.ruff_cache/
