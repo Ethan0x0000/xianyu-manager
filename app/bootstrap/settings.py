@@ -99,7 +99,7 @@ def load_settings(config_path: str = CONFIG_FILE) -> Settings:
 
     # Build settings with env var overrides (env vars take precedence)
     settings = Settings(
-        api_host=os.environ.get("API_HOST") or str(api_config.get("host", "0.0.0.0")),
+        api_host=os.environ.get("API_HOST") or str(api_config.get("host", "[::]")),
         api_port=int(os.environ.get("API_PORT") or str(api_config.get("port", 8848))),
         db_path=os.environ.get("DB_PATH", "data/xianyu_data.db"),
         frontend_dist_dir=os.environ.get("FRONTEND_DIST_DIR", "frontend/dist"),
