@@ -4,7 +4,17 @@ from app.auth.service import create_session_token, verify_admin_login
 from tests.helpers import make_settings
 
 
+VALID_BCRYPT_HASH = "$2b$12$4r/djL8R15ywfXfEc0caDOYSTvfaF9.3D1ZeJYo0vQRT8JkRkfyQa"
+
+
 class VerifyAdminLoginTests(unittest.TestCase):
+    def test_returns_true_for_matching_bcrypt_password_hash(self) -> None:
+        settings = make_settings(admin_password_hash=VALID_BCRYPT_HASH)
+
+        result = verify_admin_login("testadmin", "admin123", settings)
+
+        self.assertTrue(result)
+
     def test_returns_true_for_matching_username_and_password_hash(self) -> None:
         settings = make_settings(admin_password_hash="expected-password")
 

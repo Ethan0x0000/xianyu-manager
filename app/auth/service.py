@@ -9,8 +9,11 @@ or YAML config), not hardcoded. Password verification uses secure comparison.
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 from typing import TYPE_CHECKING
+
+import bcrypt
 
 if TYPE_CHECKING:
     from app.bootstrap.settings import Settings
@@ -31,11 +34,9 @@ def verify_admin_login(username: str, password: str, settings: Settings) -> bool
         True if credentials match, False otherwise
 
     Note:
-        - admin_password_hash in settings must be a bcrypt hash or PBKDF2 hash
-        - This function does NOT hash the input password; it expects the hash
-          to be pre-computed and stored in settings
-        - For bcrypt hashes, use bcrypt.checkpw() instead
-        - For PBKDF2 hashes, use hashlib.pbkdf2_hmac() to verify
+        - admin_password_hash in settings may be a bcrypt hash, a PBKDF2 hash,
+          or a plaintext compatibility value
+        - This function verifies the input password against the stored value
     """
     # Check username match first
     if username != settings.admin_username:
@@ -48,9 +49,47 @@ def verify_admin_login(username: str, password: str, settings: Settings) -> bool
     if not settings.admin_password_hash:
         return False
 
-    # Simple comparison - in production, use bcrypt or proper PBKDF2 verification
-    # This is a stub that always returns False until proper hashing is configured
-    return secrets.compare_digest(password, settings.admin_password_hash)
+    return _verify_password(password, settings.admin_password_hash)
+
+
+def _verify_password(password: str, password_hash: str) -> bool:
+    if password_hash.startswith("$2"):
+        return _verify_bcrypt_password(password, password_hash)
+
+    if password_hash.startswith("pbkdf2_sha256$"):
+        return _verify_pbkdf2_password(password, password_hash)
+
+    return secrets.compare_digest(password, password_hash)
+
+
+def _verify_bcrypt_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except ValueError:
+        return False
+
+
+def _verify_pbkdf2_password(password: str, password_hash: str) -> bool:
+    try:
+        algorithm, iterations_text, salt, expected_hash = password_hash.split("$", 3)
+    except ValueError:
+        return False
+
+    if algorithm != "pbkdf2_sha256":
+        return False
+
+    try:
+        iterations = int(iterations_text)
+    except ValueError:
+        return False
+
+    calculated_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        iterations,
+    ).hex()
+    return secrets.compare_digest(calculated_hash, expected_hash)
 
 
 def create_session_token(secret_key: str) -> str:

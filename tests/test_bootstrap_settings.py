@@ -5,7 +5,11 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from app.bootstrap.settings import Settings, load_settings, validate_settings
+from app.auth.service import verify_admin_login
 from tests.helpers import make_settings
+
+
+VALID_BCRYPT_HASH = "$2b$12$4r/djL8R15ywfXfEc0caDOYSTvfaF9.3D1ZeJYo0vQRT8JkRkfyQa"
 
 
 class LoadSettingsTests(unittest.TestCase):
@@ -48,6 +52,26 @@ class LoadSettingsTests(unittest.TestCase):
 
         self.assertEqual(9002, settings.api_port)
 
+    def test_load_settings_reads_admin_credentials_from_env(self) -> None:
+        with (
+            TemporaryDirectory() as temp_dir,
+            patch.dict(
+                os.environ,
+                {
+                    "ADMIN_USERNAME": "env-admin",
+                    "ADMIN_PASSWORD_HASH": VALID_BCRYPT_HASH,
+                },
+                clear=True,
+            ),
+        ):
+            missing_config = str(Path(temp_dir) / "missing.yml")
+
+            settings = load_settings(missing_config)
+
+        self.assertEqual("env-admin", settings.admin_username)
+        self.assertEqual(VALID_BCRYPT_HASH, settings.admin_password_hash)
+        self.assertTrue(verify_admin_login("env-admin", "admin123", settings))
+
 
 class ValidateSettingsTests(unittest.TestCase):
     def test_validate_settings_raises_value_error_when_secret_key_is_empty(
@@ -78,8 +102,8 @@ class SettingsDefaultsTests(unittest.TestCase):
         self.assertEqual("0.0.0.0", settings.api_host)
         self.assertEqual(8848, settings.api_port)
         self.assertEqual("data/xianyu_data.db", settings.db_path)
-        self.assertEqual("", settings.admin_username)
-        self.assertEqual("", settings.admin_password_hash)
+        self.assertEqual("admin", settings.admin_username)
+        self.assertTrue(settings.admin_password_hash)
         self.assertEqual("", settings.secret_key)
         self.assertEqual("", settings.secret_encryption_key)
         self.assertFalse(settings.ai_enabled)
@@ -92,3 +116,8 @@ class SettingsDefaultsTests(unittest.TestCase):
         self.assertTrue(settings.auto_reply_enabled)
         self.assertTrue(settings.auto_shipping_enabled)
         self.assertTrue(settings.auto_confirm_enabled)
+
+    def test_default_admin_credentials_accept_admin123(self) -> None:
+        settings = Settings()
+
+        self.assertTrue(verify_admin_login("admin", "admin123", settings))

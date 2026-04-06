@@ -2,7 +2,6 @@
 
 Loads settings from environment variables and YAML config file.
 Environment variables take precedence over YAML defaults.
-No hardcoded insecure defaults — required secrets must be explicitly set.
 """
 
 from __future__ import annotations
@@ -14,6 +13,10 @@ from pathlib import Path
 from typing import Any, Optional
 
 CONFIG_FILE = "global_config.yml"
+DEFAULT_ADMIN_USERNAME = "admin"
+DEFAULT_ADMIN_PASSWORD_HASH = (
+    "$2b$12$4r/djL8R15ywfXfEc0caDOYSTvfaF9.3D1ZeJYo0vQRT8JkRkfyQa"
+)
 
 
 @dataclass
@@ -21,7 +24,7 @@ class Settings:
     """Application settings dataclass.
 
     All settings are loaded from environment variables (with precedence)
-    and YAML config file. No hardcoded defaults for security-sensitive values.
+    and YAML config file.
     """
 
     # Server configuration
@@ -31,9 +34,9 @@ class Settings:
     # Database
     db_path: str = "data/xianyu_data.db"
 
-    # Admin bootstrap (NO hardcoded defaults — must be set by operator)
-    admin_username: str = ""
-    admin_password_hash: str = ""  # bcrypt hash, not plaintext
+    # Admin bootstrap defaults for first-time login; operators should override them.
+    admin_username: str = DEFAULT_ADMIN_USERNAME
+    admin_password_hash: str = DEFAULT_ADMIN_PASSWORD_HASH
 
     # Secret key for session signing (REQUIRED)
     secret_key: str = ""
@@ -87,8 +90,10 @@ def load_settings(config_path: str = CONFIG_FILE) -> Settings:
         api_host=os.environ.get("API_HOST") or str(api_config.get("host", "0.0.0.0")),
         api_port=int(os.environ.get("API_PORT") or str(api_config.get("port", 8848))),
         db_path=os.environ.get("DB_PATH", "data/xianyu_data.db"),
-        admin_username=os.environ.get("ADMIN_USERNAME", ""),
-        admin_password_hash=os.environ.get("ADMIN_PASSWORD_HASH", ""),
+        admin_username=os.environ.get("ADMIN_USERNAME", DEFAULT_ADMIN_USERNAME),
+        admin_password_hash=os.environ.get(
+            "ADMIN_PASSWORD_HASH", DEFAULT_ADMIN_PASSWORD_HASH
+        ),
         secret_key=os.environ.get("SECRET_KEY")
         or os.environ.get("ADMIN_SECRET_KEY", ""),
         secret_encryption_key=os.environ.get("SECRET_ENCRYPTION_KEY", ""),

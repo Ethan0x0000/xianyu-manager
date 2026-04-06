@@ -17,6 +17,16 @@ class LoginResponse(BaseModel):
     token: str
 
 
+class VerifyResponse(BaseModel):
+    authenticated: bool = True
+    username: str
+    is_admin: bool = True
+
+
+class LoginInfoStatusResponse(BaseModel):
+    enabled: bool
+
+
 class LogoutResponse(BaseModel):
     success: bool = True
 
@@ -89,9 +99,11 @@ __all__ = [
     "HealthResponse",
     "KeywordCreateRequest",
     "KeywordResponse",
+    "LoginInfoStatusResponse",
     "LoginRequest",
     "LoginResponse",
     "LogoutResponse",
+    "VerifyResponse",
     "RuntimeAccountResponse",
     "SettingEntry",
     "SettingsResponse",

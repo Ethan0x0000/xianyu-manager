@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from .accounts import router as accounts_router
-from .auth import router as auth_router
+from .auth import legacy_router as legacy_auth_router, router as auth_router
 from .items import router as items_router
 from .replies import keywords_router, router as replies_router
 from .runtime import router as runtime_router
@@ -15,6 +15,7 @@ def build_router() -> APIRouter:
     router = APIRouter()
     router.include_router(system_router)
     router.include_router(auth_router)
+    router.include_router(legacy_auth_router)
     router.include_router(accounts_router)
     router.include_router(replies_router)
     router.include_router(keywords_router)

@@ -116,7 +116,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def root_redirect() -> RedirectResponse:
         return RedirectResponse(url="/static/login.html")
 
+    async def login_redirect() -> RedirectResponse:
+        return RedirectResponse(url="/static/login.html")
+
+    async def admin_redirect() -> RedirectResponse:
+        return RedirectResponse(url="/static/index.html")
+
     app.add_api_route("/", root_redirect, include_in_schema=False)
+    app.add_api_route("/login.html", login_redirect, include_in_schema=False)
+    app.add_api_route("/admin", admin_redirect, include_in_schema=False)
 
     return app
 
