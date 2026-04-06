@@ -6,7 +6,7 @@ import sqlite3
 import tempfile
 from collections import deque
 from pathlib import Path
-from typing import Annotated, cast, override
+from typing import Annotated, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -26,7 +26,6 @@ CAPTCHA_SESSIONS: dict[str, dict[str, object]] = {}
 
 
 class _RuntimeLogHandler(logging.Handler):
-    @override
     def emit(self, record: logging.LogRecord) -> None:
         try:
             LOG_BUFFER.append(self.format(record))

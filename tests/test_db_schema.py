@@ -3,7 +3,7 @@ import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
-from typing import cast, override
+from typing import cast
 
 from app.db.schema import EXPECTED_TABLES, initialize_database
 from tests.helpers import make_test_db
@@ -12,11 +12,9 @@ from tests.helpers import make_test_db
 class TestDatabaseSchema(unittest.TestCase):
     db_paths: list[str] = []
 
-    @override
     def setUp(self) -> None:
         self.db_paths = []
 
-    @override
     def tearDown(self) -> None:
         for db_path in self.db_paths:
             if os.path.exists(db_path):

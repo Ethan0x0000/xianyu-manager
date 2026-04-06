@@ -1,6 +1,6 @@
 import os
 import unittest
-from typing import cast, override
+from typing import cast
 
 from app.db.repositories.account_repository import AccountRepository
 from tests.helpers import make_test_db
@@ -10,12 +10,10 @@ class TestAccountRepository(unittest.TestCase):
     db_path: str = ""
     repo: AccountRepository = cast(AccountRepository, cast(object, None))
 
-    @override
     def setUp(self) -> None:
         self.db_path = make_test_db()
         self.repo = AccountRepository(self.db_path)
 
-    @override
     def tearDown(self) -> None:
         if os.path.exists(self.db_path):
             os.unlink(self.db_path)

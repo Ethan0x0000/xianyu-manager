@@ -1,6 +1,6 @@
 import os
 import unittest
-from typing import cast, override
+from typing import cast
 
 from app.db.connection import get_db
 from app.services.reply_policy import ReplyPolicyService, ReplyResult
@@ -18,12 +18,10 @@ class TestReplyPolicyService(unittest.TestCase):
         ExposedReplyPolicyService, cast(object, None)
     )
 
-    @override
     def setUp(self) -> None:
         self.db_path = make_test_db()
         self.service = ExposedReplyPolicyService(self.db_path)
 
-    @override
     def tearDown(self) -> None:
         if os.path.exists(self.db_path):
             os.unlink(self.db_path)

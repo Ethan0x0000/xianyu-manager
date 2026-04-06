@@ -55,9 +55,9 @@ def test_image_upload_accepts_authenticated_image_multipart() -> None:
     payload = _json_dict(response)
     assert payload["success"] is True
     image_url = cast(str, payload["image_url"])
-    assert image_url.startswith("/static/uploads/")
+    assert image_url.startswith("/uploads/")
 
-    saved_file = PROJECT_ROOT / image_url.lstrip("/")
+    saved_file = PROJECT_ROOT / "data" / image_url.lstrip("/")
     assert saved_file.exists()
     saved_file.unlink(missing_ok=True)
 

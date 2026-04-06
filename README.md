@@ -34,6 +34,9 @@ venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 playwright install chromium
 
+# 构建前端
+cd frontend && npm install && npm run build && cd ..
+
 # 设置必要的环境变量
 set SECRET_KEY=your-secure-random-key
 set SECRET_ENCRYPTION_KEY=your-encryption-key
@@ -66,5 +69,5 @@ docker compose -f docker-compose-cn.yml up -d --build
 
 ## 重要说明
 - 首次登录后请立即设置管理员密码
-- `static/xianyu_js_version_2.js` 不可修改，签名逻辑依赖它
+- `app/protocol/xianyu_js_version_2.js` 不可修改，签名逻辑依赖它
 - 滑块验证功能内部实现不可修改

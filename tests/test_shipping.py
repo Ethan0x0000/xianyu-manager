@@ -1,7 +1,7 @@
 import os
 import sqlite3
 import unittest
-from typing import cast, override
+from typing import cast
 
 from app.db.connection import get_db
 from app.services.shipping import DeliveryAction, DeliveryMode, ShippingService
@@ -12,12 +12,10 @@ class TestShippingService(unittest.TestCase):
     db_path: str = ""
     service: ShippingService = cast(ShippingService, cast(object, None))
 
-    @override
     def setUp(self) -> None:
         self.db_path = make_test_db()
         self.service = ShippingService(self.db_path)
 
-    @override
     def tearDown(self) -> None:
         if os.path.exists(self.db_path):
             os.unlink(self.db_path)

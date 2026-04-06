@@ -3,7 +3,7 @@ Goofish Signing Protocol Wrapper
 
 This module provides a thin wrapper around the Goofish signing logic.
 It delegates to the existing utils/xianyu_utils.py implementation which uses
-PyExecJS to call the frozen JavaScript signing code in static/xianyu_js_version_2.js.
+PyExecJS to call the frozen JavaScript signing code in app/protocol/xianyu_js_version_2.js.
 
 The signing algorithm is frozen and must not be modified. All changes to signing
 logic must be made in the JavaScript file only, and only if absolutely necessary.
@@ -23,11 +23,10 @@ def get_js_path() -> str:
     Get the path to the frozen Goofish signing JavaScript file.
 
     Returns:
-        str: Absolute path to static/xianyu_js_version_2.js
+        str: Absolute path to app/protocol/xianyu_js_version_2.js
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    root_dir = os.path.dirname(os.path.dirname(current_dir))
-    js_path = os.path.join(root_dir, "static", "xianyu_js_version_2.js")
+    js_path = os.path.join(current_dir, "xianyu_js_version_2.js")
     return js_path
 
 

@@ -1,5 +1,4 @@
 import unittest
-from typing import override
 from unittest.mock import patch
 
 from app.runtime.account_registry import (
@@ -14,7 +13,6 @@ from app.runtime.account_registry import (
 class TestAccountRegistry(unittest.TestCase):
     registry: AccountRegistry = AccountRegistry()
 
-    @override
     def setUp(self) -> None:
         self.registry = AccountRegistry()
 

@@ -9,7 +9,7 @@ Key Invariants:
 - Heartbeat frame format: {"lwp": "/!", "headers": {"mid": <generated_mid>}}
 - Signing algorithm: MD5-based with token, timestamp, app_key, and data
 - WebSocket URL: wss://wss-goofish.dingtalk.com/
-- JavaScript signing runtime: static/xianyu_js_version_2.js (frozen, do not modify)
+- JavaScript signing runtime: app/protocol/xianyu_js_version_2.js (frozen, do not modify)
 """
 
 from .goofish_signing import load_signing_runtime

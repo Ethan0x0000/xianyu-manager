@@ -6,7 +6,6 @@ import shutil
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import override
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -38,7 +37,6 @@ class SPAStaticFiles(StaticFiles):
     ``index.html`` so that the React SPA router can handle the URL.
     """
 
-    @override
     async def get_response(self, path: str, scope: Scope) -> Response:
         try:
             return await super().get_response(path, scope)
@@ -122,28 +120,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
 
-    static_dir = _resolve_project_path(settings.static_dir)
+    frontend_dir = _resolve_project_path(settings.frontend_dist_dir)
     upload_dir = _resolve_project_path(settings.uploads_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
+    (upload_dir / "images").mkdir(parents=True, exist_ok=True)
 
     app.state.settings = settings
     app.state.container = container
     app.state.runtime_supervisor = runtime_supervisor
-    app.state.static_dir = static_dir
+    app.state.frontend_dir = frontend_dir
     app.state.upload_dir = upload_dir
     register_routers(app)
 
-    # Serve uploaded files and other operational assets under /static/
-    if static_dir.exists():
-        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    # Serve uploaded images under /uploads/
+    if upload_dir.exists():
+        app.mount("/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
 
-    # SPA mount: Vite build output lives in static_dir; the SPAStaticFiles
+    # SPA mount: Vite build output lives in frontend/dist/; the SPAStaticFiles
     # class returns index.html for any path that doesn't match a real file,
     # so the React router handles client-side URLs like /login, /dashboard.
-    if (static_dir / "index.html").exists():
+    if frontend_dir.exists() and (frontend_dir / "index.html").exists():
         app.mount(
             "/",
-            SPAStaticFiles(directory=str(static_dir), html=True),
+            SPAStaticFiles(directory=str(frontend_dir), html=True),
             name="spa",
         )
 

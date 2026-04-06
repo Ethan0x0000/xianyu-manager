@@ -41,9 +41,9 @@ class Settings:
     # Database
     db_path: str = "data/xianyu_data.db"
 
-    # Static asset and upload paths
-    static_dir: str = "static"
-    uploads_dir: str = "static/uploads"
+    # Frontend build output and upload paths
+    frontend_dist_dir: str = "frontend/dist"
+    uploads_dir: str = "data/uploads"
 
     # Admin bootstrap defaults for first-time login; operators should override them.
     admin_username: str = DEFAULT_ADMIN_USERNAME
@@ -102,8 +102,8 @@ def load_settings(config_path: str = CONFIG_FILE) -> Settings:
         api_host=os.environ.get("API_HOST") or str(api_config.get("host", "0.0.0.0")),
         api_port=int(os.environ.get("API_PORT") or str(api_config.get("port", 8848))),
         db_path=os.environ.get("DB_PATH", "data/xianyu_data.db"),
-        static_dir=os.environ.get("STATIC_DIR", "static"),
-        uploads_dir=os.environ.get("UPLOADS_DIR", "static/uploads"),
+        frontend_dist_dir=os.environ.get("FRONTEND_DIST_DIR", "frontend/dist"),
+        uploads_dir=os.environ.get("UPLOADS_DIR", "data/uploads"),
         admin_username=os.environ.get("ADMIN_USERNAME", DEFAULT_ADMIN_USERNAME),
         admin_password_hash=os.environ.get(
             "ADMIN_PASSWORD_HASH", DEFAULT_ADMIN_PASSWORD_HASH

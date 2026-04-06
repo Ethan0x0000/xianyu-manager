@@ -19,13 +19,13 @@ echo "✓ 已禁用 core dumps"
 
 # 创建必要的目录
 echo "创建必要的目录..."
-mkdir -p /app/data /app/logs /app/backups /app/static/uploads/images
+mkdir -p /app/data /app/logs /app/backups /app/data/uploads/images
 mkdir -p /app/trajectory_history
 echo "✓ 目录创建完成"
 
 # 设置目录权限
 echo "设置目录权限..."
-chmod 777 /app/data /app/logs /app/backups /app/static/uploads /app/static/uploads/images
+chmod 777 /app/data /app/logs /app/backups /app/data/uploads /app/data/uploads/images
 chmod 777 /app/trajectory_history 2>/dev/null || true
 echo "✓ 权限设置完成"
 

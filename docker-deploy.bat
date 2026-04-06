@@ -71,7 +71,7 @@ REM 创建必要的目录
 if not exist "data" mkdir data
 if not exist "logs" mkdir logs
 if not exist "backups" mkdir backups
-if not exist "static\uploads\images" mkdir static\uploads\images
+if not exist "data\uploads\images" mkdir data\uploads\images
 echo %SUCCESS_PREFIX% 已创建必要的目录
 
 REM 处理命令行参数

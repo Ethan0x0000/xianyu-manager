@@ -1111,7 +1111,7 @@ class XianyuSliderStealth:
         try:
             import glob
 
-            screenshots_dir = "static/uploads/images"
+            screenshots_dir = "data/uploads/images"
             os.makedirs(screenshots_dir, exist_ok=True)
 
             # 清理旧截图
@@ -2722,7 +2722,7 @@ class XianyuSliderStealth:
         try:
             import glob
 
-            screenshots_dir = "static/uploads/images"
+            screenshots_dir = "data/uploads/images"
             all_screenshots = glob.glob(
                 os.path.join(screenshots_dir, f"face_verify_{self.pure_user_id}_*.jpg")
             )

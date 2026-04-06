@@ -1,5 +1,4 @@
 import unittest
-from typing import override
 
 from app.runtime.message_pipeline import (
     MessagePipeline,
@@ -32,7 +31,6 @@ class TestMessagePipelineParse(unittest.TestCase):
     deduplicator: StubDeduplicator = StubDeduplicator()
     pipeline: MessagePipeline = MessagePipeline(deduplicator=StubDeduplicator())
 
-    @override
     def setUp(self) -> None:
         self.deduplicator = StubDeduplicator()
         self.pipeline = MessagePipeline(deduplicator=self.deduplicator)
@@ -97,7 +95,6 @@ class TestMessagePipelineQueue(unittest.IsolatedAsyncioTestCase):
     deduplicator: StubDeduplicator = StubDeduplicator()
     pipeline: MessagePipeline = MessagePipeline(deduplicator=StubDeduplicator())
 
-    @override
     async def asyncSetUp(self) -> None:
         self.deduplicator = StubDeduplicator()
         self.pipeline = MessagePipeline(deduplicator=self.deduplicator)

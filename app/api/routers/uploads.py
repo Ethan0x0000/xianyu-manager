@@ -26,7 +26,12 @@ def _upload_dir(request: Request) -> Path:
 
 
 def _image_url(saved_path: str) -> str:
-    return "/" + saved_path.replace("\\", "/").lstrip("/")
+    path = saved_path.replace("\\", "/")
+    # Extract from the "uploads/" segment onward so the URL matches the mount
+    idx = path.find("uploads/")
+    if idx >= 0:
+        return "/" + path[idx:]
+    return "/" + path.lstrip("/")
 
 
 def _validate_image_upload(file: UploadFile) -> None:

@@ -104,8 +104,8 @@ RUN playwright install chromium && \
     playwright install-deps chromium
 
 # 创建必要的目录并设置权限
-RUN mkdir -p /app/logs /app/data /app/backups /app/static/uploads/images && \
-    chmod 777 /app/logs /app/data /app/backups /app/static/uploads /app/static/uploads/images
+RUN mkdir -p /app/logs /app/data /app/backups /app/data/uploads/images && \
+    chmod 777 /app/logs /app/data /app/backups /app/data/uploads /app/data/uploads/images
 
 # 配置系统限制，防止core文件生成
 RUN echo "ulimit -c 0" >> /etc/profile
