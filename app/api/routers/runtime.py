@@ -457,6 +457,20 @@ async def browse_table(
     return _table_page_payload(db_path, table_name, page, page_size)
 
 
+@router.delete("/api/data/table/{table_name}")
+async def clear_table(
+    table_name: str,
+    token: Annotated[str, Depends(verify_token)],
+    db_path: Annotated[str, Depends(get_db_path)],
+) -> dict[str, object]:
+    del token
+    safe_table_name = _require_table_name(db_path, table_name)
+    with get_db(db_path) as conn:
+        cursor = conn.execute(f'DELETE FROM "{safe_table_name}"')
+        deleted = cursor.rowcount
+    return {"table": safe_table_name, "deleted": deleted}
+
+
 @router.get("/api/captcha/status")
 async def captcha_status(
     token: Annotated[str, Depends(verify_token)],
@@ -490,12 +504,42 @@ async def restart_system(
     return {"success": True, "restarting": True}
 
 
+@router.post("/api/runtime/cache/clear")
+async def runtime_cache_clear(
+    token: Annotated[str, Depends(verify_token)],
+) -> dict[str, object]:
+    del token
+    return {"success": True, "reloaded": True}
+
+
+@router.post("/api/runtime/restart")
+async def runtime_restart(
+    token: Annotated[str, Depends(verify_token)],
+) -> dict[str, object]:
+    del token
+    return {"success": True, "restarting": True}
+
+
 @router.post("/items/search_multiple", include_in_schema=False)
 async def search_items_stub(
     token: Annotated[str, Depends(verify_token)],
 ) -> dict[str, object]:
     del token
     return {"success": True, "data": [], "total": 0, "need_captcha": False}
+
+
+@router.post("/api/item-search/start")
+async def start_item_search(
+    token: Annotated[str, Depends(verify_token)],
+) -> dict[str, object]:
+    del token
+    return {
+        "success": True,
+        "data": [],
+        "total": 0,
+        "need_captcha": False,
+        "task_id": uuid4().hex,
+    }
 
 
 @router.get("/admin/risk-control-logs", include_in_schema=False)

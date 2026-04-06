@@ -77,6 +77,11 @@ async def verify(
     return _build_verify_response()
 
 
+@router.get("/login-info-status", response_model=LoginInfoStatusResponse)
+async def auth_login_info_status() -> LoginInfoStatusResponse:
+    return _build_login_info_status_response()
+
+
 @legacy_router.post("/logout", response_model=LogoutResponse)
 async def legacy_logout(
     token: Annotated[str, Depends(verify_token)],

@@ -85,6 +85,9 @@ config.local.*
 playwright-report/
 test-results/
 
+# Frontend dependencies
+frontend/node_modules/
+
 # Nuitka build artifacts
 *.build/
 *.dist/
