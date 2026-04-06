@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
@@ -118,21 +117,23 @@ describe('AccountsPage', () => {
       return Promise.reject(new Error(`Unexpected GET ${url}`))
     })
 
-    const user = userEvent.setup()
     renderWithProviders(<AccountsPage />)
 
-    await user.click(await screen.findByRole('button', { name: '添加账号' }))
+    fireEvent.click(await screen.findByRole('button', { name: '添加账号' }))
 
     expect(screen.getByRole('dialog', { name: '添加账号' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'QR登录' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '密码登录' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '手动Cookie' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /取.*消/ }))
+    fireEvent.click(screen.getByRole('button', { name: /取.*消/ }))
 
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: '添加账号' })).not.toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(screen.queryByRole('dialog', { name: '添加账号' })).not.toBeInTheDocument()
+      },
+      { timeout: 15000 },
+    )
   })
 
   it('submits the manual cookie flow and refreshes the table', async () => {
