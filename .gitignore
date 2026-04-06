@@ -533,6 +533,7 @@ tmp_*.py
 quick_*.py
 fix_*.py
 test_*.py
+!tests/test_xianyu_message_dedup.py
 check_*.py
 debug_*.py
 

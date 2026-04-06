@@ -15432,6 +15432,32 @@ class XianyuLive:
 
         return None
 
+    def _resolve_message_dedupe_key(
+        self,
+        message_data: dict,
+        *,
+        chat_id: str,
+        send_message: str,
+        create_time: int = 0,
+    ) -> Optional[str]:
+        """为入口去重解析稳定键，优先使用显式 messageId，缺失时回退到内容指纹。"""
+        message_id = self._extract_message_id(message_data)
+        if message_id:
+            return message_id
+
+        try:
+            return self._build_fallback_message_id(
+                chat_id=chat_id,
+                send_message=send_message,
+                message_data=message_data,
+                create_time=create_time,
+            )
+        except Exception as e:
+            logger.debug(
+                f"【{self.cookie_id}】生成入口消息去重键失败: {self._safe_str(e)}"
+            )
+            return None
+
     def _split_sync_package_packets(self, message_data: dict) -> list[dict]:
         """将包含多条 data 的同步包拆分为多个单条同步包，便于逐条复用现有处理链。"""
         try:
@@ -17230,11 +17256,16 @@ class XianyuLive:
 
             # 使用防抖机制处理聊天消息回复
             # 如果用户连续发送消息，等待用户停止发送后再回复最后一条消息
-            message_id = self._extract_message_id(message)
+            message_id = self._resolve_message_dedupe_key(
+                message,
+                chat_id=chat_id,
+                send_message=send_message,
+                create_time=create_time,
+            )
 
             # 【关键修复】在进入防抖调度之前，先做消息级去重
-            # 闲鱼IM协议会通过不同的WebSocket包重复推送同一条消息（相同messageId）
-            # 如果不在此处拦截，两次推送会各自创建独立的防抖任务，导致双重回复
+            # 闲鱼IM协议会通过不同的WebSocket包重复推送同一条逻辑消息。
+            # 优先使用显式 messageId；缺失时退化为稳定内容指纹，避免重复推送绕过入口去重。
             if message_id:
                 if not await self._mark_message_processed_if_new(message_id):
                     logger.info(
