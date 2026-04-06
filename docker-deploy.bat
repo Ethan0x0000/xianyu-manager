@@ -187,8 +187,7 @@ goto end
 echo.
 echo %SUCCESS_PREFIX% 🎉 部署完成！
 echo.
-set "WEB_PORT=9000"
-if /i "%COMPOSE_FILE%"=="docker-compose-cn.yml" set "WEB_PORT=8000"
+set "WEB_PORT=8848"
 echo 📱 访问地址:
 echo    HTTP: http://localhost:%WEB_PORT%
 echo.

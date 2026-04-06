@@ -30,11 +30,7 @@ compose() {
 }
 
 get_web_port() {
-    if [ "$SELECTED_COMPOSE_FILE" = "docker-compose-cn.yml" ]; then
-        echo "8000"
-    else
-        echo "9000"
-    fi
+    echo "8848"
 }
 
 # 打印带颜色的消息

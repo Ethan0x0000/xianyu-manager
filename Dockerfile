@@ -6,8 +6,8 @@ FROM ${BASE_IMAGE}
 
 # 设置标签信息
 LABEL maintainer="GuDong2003"
-LABEL version="2.1.0"
-LABEL description="闲鱼管理系统 - GuDong2003 维护版本，支持多用户、多账号与自动化管理"
+LABEL version="2.0.0"
+LABEL description="闲鱼管理系统 - 单管理员多账号自动化管理"
 LABEL repository="https://github.com/GuDong2003/xianyu-auto-reply-fix"
 LABEL license="仅供学习与研究使用，禁止商业用途"
 LABEL author="GuDong2003"
@@ -111,21 +111,18 @@ RUN echo "ulimit -c 0" >> /etc/profile
 # 在生产环境中，建议配置适当的用户映射
 
 # 暴露端口
-EXPOSE 8090
+EXPOSE 8848
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8090/health || exit 1
+    CMD curl -f http://localhost:8848/health || exit 1
 
 # 复制启动脚本
-# 复制启动脚本和调试工具
 COPY entrypoint.sh /app/entrypoint.sh
-COPY debug-xvfb.sh /app/debug-xvfb.sh
 
-# 设置执行权限（使用多种方式确保权限正确）
-RUN chmod +x /app/entrypoint.sh /app/debug-xvfb.sh && \
-    chmod 755 /app/entrypoint.sh /app/debug-xvfb.sh && \
-    ls -la /app/entrypoint.sh /app/debug-xvfb.sh
+# 设置执行权限
+RUN chmod +x /app/entrypoint.sh && \
+    chmod 755 /app/entrypoint.sh
 
 # 启动命令
 CMD ["/app/entrypoint.sh"]

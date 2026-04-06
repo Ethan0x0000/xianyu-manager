@@ -179,7 +179,7 @@ echo "使用方法:"
 if [ "$PUSH_IMAGE" = "y" ]; then
     echo "  docker pull $FULL_IMAGE_NAME"
 fi
-echo "  docker run -d -p 8090:8090 --name xianyu-auto-reply-fix $FULL_IMAGE_NAME"
+echo "  docker run -d -p 8848:8848 --name xianyu-auto-reply-fix $FULL_IMAGE_NAME"
 echo
 echo "验证多架构镜像:"
 if [ "$PUSH_IMAGE" = "y" ]; then

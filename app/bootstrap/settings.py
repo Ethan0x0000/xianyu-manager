@@ -26,7 +26,7 @@ class Settings:
 
     # Server configuration
     api_host: str = "0.0.0.0"
-    api_port: int = 8090
+    api_port: int = 8848
 
     # Database
     db_path: str = "data/xianyu_data.db"
@@ -85,7 +85,7 @@ def load_settings(config_path: str = CONFIG_FILE) -> Settings:
     # Build settings with env var overrides (env vars take precedence)
     settings = Settings(
         api_host=os.environ.get("API_HOST") or str(api_config.get("host", "0.0.0.0")),
-        api_port=int(os.environ.get("API_PORT") or str(api_config.get("port", 8090))),
+        api_port=int(os.environ.get("API_PORT") or str(api_config.get("port", 8848))),
         db_path=os.environ.get("DB_PATH", "data/xianyu_data.db"),
         admin_username=os.environ.get("ADMIN_USERNAME", ""),
         admin_password_hash=os.environ.get("ADMIN_PASSWORD_HASH", ""),

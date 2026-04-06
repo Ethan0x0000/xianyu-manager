@@ -18,7 +18,7 @@ if pgrep -f "Start.py" > /dev/null; then
         sleep 2
     else
         echo "保持现有进程运行"
-        echo "Web管理界面: http://localhost:8090"
+        echo "Web管理界面: http://localhost:8848"
         exit 0
     fi
 fi
@@ -34,7 +34,7 @@ sleep 5
 if pgrep -f "Start.py" > /dev/null; then
     echo "========================================"
     echo "  启动成功!"
-    echo "  Web管理界面: http://localhost:8090"
+    echo "  Web管理界面: http://localhost:8848"
     echo "========================================"
 else
     echo "启动失败，请检查日志"

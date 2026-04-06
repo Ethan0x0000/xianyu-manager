@@ -152,7 +152,7 @@ fi
 # 显示启动信息
 echo "========================================"
 echo "  系统启动参数："
-echo "  - API端口: ${API_PORT:-8090}"
+echo "  - API端口: ${API_PORT:-8848}"
 echo "  - API主机: ${API_HOST:-0.0.0.0}"
 echo "  - Debug模式: ${DEBUG:-false}"
 echo "  - 自动重载: ${RELOAD:-false}"
