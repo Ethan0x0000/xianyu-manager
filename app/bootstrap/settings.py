@@ -10,13 +10,20 @@ import os
 import yaml
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import cast
 
 CONFIG_FILE = "global_config.yml"
 DEFAULT_ADMIN_USERNAME = "admin"
 DEFAULT_ADMIN_PASSWORD_HASH = (
     "$2b$12$4r/djL8R15ywfXfEc0caDOYSTvfaF9.3D1ZeJYo0vQRT8JkRkfyQa"
 )
+
+
+def _as_mapping(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    typed_value = cast(dict[object, object], value)
+    return {str(key): nested_value for key, nested_value in typed_value.items()}
 
 
 @dataclass
@@ -33,6 +40,10 @@ class Settings:
 
     # Database
     db_path: str = "data/xianyu_data.db"
+
+    # Static asset and upload paths
+    static_dir: str = "static"
+    uploads_dir: str = "static/uploads"
 
     # Admin bootstrap defaults for first-time login; operators should override them.
     admin_username: str = DEFAULT_ADMIN_USERNAME
@@ -76,20 +87,23 @@ def load_settings(config_path: str = CONFIG_FILE) -> Settings:
     Returns:
         Settings dataclass instance with all configuration values
     """
-    raw: dict[str, Any] = {}
+    raw: dict[str, object] = {}
     if Path(config_path).exists():
         with open(config_path, encoding="utf-8") as f:
-            raw = yaml.safe_load(f) or {}
+            loaded = cast(object, yaml.safe_load(f))
+        raw = _as_mapping(loaded)
 
     # Extract nested config values with safe defaults
-    auto_reply_config = raw.get("AUTO_REPLY", {})
-    api_config = auto_reply_config.get("api", {})
+    auto_reply_config = _as_mapping(raw.get("AUTO_REPLY", {}))
+    api_config = _as_mapping(auto_reply_config.get("api", {}))
 
     # Build settings with env var overrides (env vars take precedence)
     settings = Settings(
         api_host=os.environ.get("API_HOST") or str(api_config.get("host", "0.0.0.0")),
         api_port=int(os.environ.get("API_PORT") or str(api_config.get("port", 8848))),
         db_path=os.environ.get("DB_PATH", "data/xianyu_data.db"),
+        static_dir=os.environ.get("STATIC_DIR", "static"),
+        uploads_dir=os.environ.get("UPLOADS_DIR", "static/uploads"),
         admin_username=os.environ.get("ADMIN_USERNAME", DEFAULT_ADMIN_USERNAME),
         admin_password_hash=os.environ.get(
             "ADMIN_PASSWORD_HASH", DEFAULT_ADMIN_PASSWORD_HASH
@@ -127,7 +141,7 @@ def validate_settings(settings: Settings) -> None:
     Raises:
         ValueError: If required settings are not set
     """
-    errors = []
+    errors: list[str] = []
 
     if not settings.secret_key:
         errors.append("SECRET_KEY env var is required but not set")

@@ -13,6 +13,7 @@ class XianyuAccount:
     notes: str = ""
     enabled: bool = True
     show_browser: bool = False
+    pause_duration: int = 10
     created_at: str | None = None
     updated_at: str | None = None
 

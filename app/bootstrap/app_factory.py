@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routers import build_router
+from app.api.routers import register_routers
 from app.bootstrap.runtime import RuntimeSupervisor
 from app.bootstrap.settings import Settings, load_settings
 from app.db.schema import initialize_database
@@ -104,12 +104,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
 
+    static_dir = _resolve_project_path(settings.static_dir)
+    upload_dir = _resolve_project_path(settings.uploads_dir)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
     app.state.settings = settings
     app.state.container = container
     app.state.runtime_supervisor = runtime_supervisor
-    app.include_router(build_router())
+    app.state.static_dir = static_dir
+    app.state.upload_dir = upload_dir
+    register_routers(app)
 
-    static_dir = PROJECT_ROOT / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 

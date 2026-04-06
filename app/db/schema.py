@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sqlite3
+from typing import cast
+
 from .connection import get_db
 
 EXPECTED_TABLES: tuple[str, ...] = (
@@ -32,6 +35,7 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
         notes TEXT NOT NULL DEFAULT '',
         enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
         show_browser INTEGER NOT NULL DEFAULT 0 CHECK (show_browser IN (0, 1)),
+        pause_duration INTEGER NOT NULL DEFAULT 10 CHECK (pause_duration BETWEEN 0 AND 60),
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -190,8 +194,21 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
 )
 
 
+def _ensure_account_compat_columns(conn: sqlite3.Connection) -> None:
+    pragma_rows = cast(
+        list[tuple[int, str, str, int, object | None, int]],
+        conn.execute("PRAGMA table_info(xianyu_accounts)").fetchall(),
+    )
+    columns = {str(row[1]) for row in pragma_rows}
+    if "pause_duration" not in columns:
+        _ = conn.execute(
+            "ALTER TABLE xianyu_accounts ADD COLUMN pause_duration INTEGER NOT NULL DEFAULT 10"
+        )
+
+
 def initialize_database(db_path: str) -> None:
     """Create the fresh single-admin schema."""
     with get_db(db_path) as conn:
         for statement in SCHEMA_STATEMENTS:
             _ = conn.execute(statement)
+        _ensure_account_compat_columns(conn)

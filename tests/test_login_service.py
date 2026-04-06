@@ -89,6 +89,49 @@ class TestLoginServiceAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, {"status": "pending", "message": "login_initiated"})
 
+    async def test_create_password_session_returns_processing_session_with_metadata(
+        self,
+    ) -> None:
+        service = LoginService()
+
+        create_password_session = getattr(service, "create_password_session", None)
+        self.assertIsNotNone(create_password_session)
+        assert create_password_session is not None
+        session = await create_password_session(
+            account_id="account-1",
+            username="seller-user",
+            password="seller-pass",
+            refresh_mode=True,
+            show_browser=True,
+        )
+
+        self.assertIsInstance(uuid.UUID(session.session_id), uuid.UUID)
+        self.assertEqual(session.account_id, "account-1")
+        self.assertEqual(session.username, "seller-user")
+        self.assertEqual(session.status, "processing")
+        self.assertTrue(session.refresh_mode)
+        self.assertTrue(session.show_browser)
+
+    async def test_get_password_session_returns_session_or_none_for_unknown_id(
+        self,
+    ) -> None:
+        service = LoginService()
+
+        create_password_session = getattr(service, "create_password_session", None)
+        get_password_session = getattr(service, "get_password_session", None)
+        self.assertIsNotNone(create_password_session)
+        self.assertIsNotNone(get_password_session)
+        assert create_password_session is not None
+        assert get_password_session is not None
+        session = await create_password_session(
+            account_id="account-1",
+            username="seller-user",
+            password="seller-pass",
+        )
+
+        self.assertIs(get_password_session(session.session_id), session)
+        self.assertIsNone(get_password_session("missing-session"))
+
 
 if __name__ == "__main__":
     _ = unittest.main()

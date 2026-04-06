@@ -47,6 +47,31 @@ class QRLoginSession:
         return time.time() > self.expires_at
 
 
+@dataclass
+class PasswordLoginSession:
+    """Represents a password-login orchestration session."""
+
+    session_id: str
+    account_id: str
+    username: str
+    refresh_mode: bool = False
+    show_browser: bool = False
+    created_at: float = field(default_factory=time.time)
+    expires_at: float = field(default_factory=lambda: time.time() + 240)
+    status: str = "processing"
+    message: str = "login_initiated"
+    result_cookie: str = ""
+    verification_url: str = ""
+    qr_code_url: str = ""
+    screenshot_path: str = ""
+    verification_type: str = ""
+    verification_message: str = ""
+
+    @property
+    def is_expired(self) -> bool:
+        return time.time() > self.expires_at
+
+
 class LoginService:
     """
     Manages Xianyu account login flows (QR and password).
@@ -58,6 +83,7 @@ class LoginService:
 
     def __init__(self) -> None:
         self._active_sessions: dict[str, QRLoginSession] = {}
+        self._password_sessions: dict[str, PasswordLoginSession] = {}
 
     def create_qr_session(self) -> QRLoginSession:
         """Create a new QR login session and return session metadata."""
@@ -99,6 +125,36 @@ class LoginService:
 
         logger.info("[%s] Password login initiated", account_id)
         return {"status": "pending", "message": "login_initiated"}
+
+    async def create_password_session(
+        self,
+        account_id: str,
+        username: str,
+        password: str,
+        refresh_mode: bool = False,
+        show_browser: bool = False,
+    ) -> PasswordLoginSession:
+        """Validate password-login input and register a polling session."""
+        import uuid
+
+        result = await self.initiate_password_login(account_id, username, password)
+        session_id = str(uuid.uuid4())
+        session = PasswordLoginSession(
+            session_id=session_id,
+            account_id=account_id,
+            username=username,
+            refresh_mode=refresh_mode,
+            show_browser=show_browser,
+            status="processing",
+            message=str(result.get("message") or "login_initiated"),
+        )
+        self._password_sessions[session_id] = session
+        logger.info("[%s] Password session created: %s", account_id, session_id)
+        return session
+
+    def get_password_session(self, session_id: str) -> PasswordLoginSession | None:
+        """Get a password-login session by ID."""
+        return self._password_sessions.get(session_id)
 
     def active_session_count(self) -> int:
         """Return count of active (non-expired) sessions."""

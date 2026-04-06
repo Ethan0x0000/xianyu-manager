@@ -78,6 +78,7 @@ class TestDatabaseSchema(unittest.TestCase):
                 "account_id",
                 "cookie_str",
                 "enabled",
+                "pause_duration",
                 "show_browser",
                 "created_at",
                 "updated_at",
