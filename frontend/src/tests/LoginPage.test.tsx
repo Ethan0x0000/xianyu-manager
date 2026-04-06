@@ -101,7 +101,7 @@ describe('LoginPage', () => {
     vi.mocked(authApi.loginApi).mockResolvedValue({ token: 'valid-token' })
     vi.mocked(authApi.verifyApi).mockResolvedValue({ username: 'admin' })
 
-    const { container } = render(
+    render(
       <MemoryRouter
         future={{
           v7_relativeSplatPath: true,
@@ -215,7 +215,9 @@ describe('LoginPage', () => {
       expect(passwordInput.disabled).toBe(true)
     })
 
-    resolveLogin!({ token: 'valid-token' })
+    await act(async () => {
+      resolveLogin!({ token: 'valid-token' })
+    })
 
     await waitFor(() => {
       expect(usernameInput.disabled).toBe(false)
@@ -334,7 +336,7 @@ describe('LoginPage', () => {
     })
     vi.mocked(client.apiClient.get).mockReturnValue(loginInfoPromise as any)
 
-    const { rerender } = render(
+    render(
       <MemoryRouter
         future={{
           v7_relativeSplatPath: true,
@@ -351,7 +353,9 @@ describe('LoginPage', () => {
       expect(spinElement).toBeInTheDocument()
     })
 
-    resolveLoginInfo!({ data: { enabled: false } })
+    await act(async () => {
+      resolveLoginInfo!({ data: { enabled: false } })
+    })
 
     await waitFor(() => {
       expect(screen.getByText('管理员登录')).toBeInTheDocument()
