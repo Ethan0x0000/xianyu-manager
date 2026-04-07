@@ -26,6 +26,15 @@ def _as_mapping(value: object) -> dict[str, object]:
     return {str(key): nested_value for key, nested_value in typed_value.items()}
 
 
+def _normalize_bind_host(value: str) -> str:
+    normalized = value.strip()
+    if normalized.startswith("[") and normalized.endswith("]"):
+        candidate = normalized[1:-1]
+        if ":" in candidate:
+            return candidate
+    return normalized
+
+
 @dataclass
 class Settings:
     """Application settings dataclass.
@@ -35,7 +44,7 @@ class Settings:
     """
 
     # Server configuration
-    api_host: str = "[::]"
+    api_host: str = "::"
     api_port: int = 8848
 
     # Database
@@ -99,7 +108,9 @@ def load_settings(config_path: str = CONFIG_FILE) -> Settings:
 
     # Build settings with env var overrides (env vars take precedence)
     settings = Settings(
-        api_host=os.environ.get("API_HOST") or str(api_config.get("host", "[::]")),
+        api_host=_normalize_bind_host(
+            os.environ.get("API_HOST") or str(api_config.get("host", "::"))
+        ),
         api_port=int(os.environ.get("API_PORT") or str(api_config.get("port", 8848))),
         db_path=os.environ.get("DB_PATH", "data/xianyu_data.db"),
         frontend_dist_dir=os.environ.get("FRONTEND_DIST_DIR", "frontend/dist"),

@@ -33,6 +33,18 @@ class LoadSettingsTests(unittest.TestCase):
 
         self.assertEqual(9001, settings.api_port)
 
+    def test_load_settings_normalizes_bracketed_ipv6_host_for_binding(self) -> None:
+        with TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
+            config_path = Path(temp_dir) / "config.yml"
+            _ = config_path.write_text(
+                'AUTO_REPLY:\n  api:\n    host: "[::]"\n',
+                encoding="utf-8",
+            )
+
+            settings = load_settings(str(config_path))
+
+        self.assertEqual("::", settings.api_host)
+
     def test_load_settings_gives_env_var_precedence_over_yaml(self) -> None:
         with (
             TemporaryDirectory() as temp_dir,
@@ -99,7 +111,7 @@ class SettingsDefaultsTests(unittest.TestCase):
     def test_settings_dataclass_has_correct_default_values(self) -> None:
         settings = Settings()
 
-        self.assertEqual("[::]", settings.api_host)
+        self.assertEqual("::", settings.api_host)
         self.assertEqual(8848, settings.api_port)
         self.assertEqual("data/xianyu_data.db", settings.db_path)
         self.assertEqual("admin", settings.admin_username)

@@ -10,7 +10,7 @@ APP_CONFIG:
 AUTO_REPLY:
   api:
     enabled: false  # 禁用API回复，使用AI回复或关键词回复
-    host: "[::]"  # 监听所有IPv6地址，兼容IPv4
+    host: "::"  # 监听所有IPv6地址，兼容IPv4
     port: 8848
     timeout: 10
     url: http://localhost:8848/xianyu/reply
