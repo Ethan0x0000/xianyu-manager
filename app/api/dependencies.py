@@ -22,6 +22,21 @@ def get_db_path(request: Request) -> str:
         return "data/xianyu_data.db"
 
 
+def get_runtime_settings(request: Request) -> Settings:
+    """Get runtime settings from app state.
+
+    Returns the Settings instance attached to ``app.state`` which includes
+    database-applied overrides (e.g. ``admin_password_hash`` persisted via
+    the admin API).  Falls back to a fresh ``load_settings()`` call when
+    app state is unavailable (e.g. during tests).
+    """
+    app = cast(FastAPI, request.app)
+    app_settings = cast(Settings | None, getattr(app.state, "settings", None))
+    if isinstance(app_settings, Settings):
+        return app_settings
+    return load_settings()
+
+
 async def verify_token(
     authorization: Annotated[str | None, Header()] = None,
 ) -> str:
@@ -42,4 +57,4 @@ async def verify_token(
     return token
 
 
-__all__ = ["get_db_path", "verify_token"]
+__all__ = ["get_db_path", "get_runtime_settings", "verify_token"]

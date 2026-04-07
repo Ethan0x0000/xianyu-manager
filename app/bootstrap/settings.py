@@ -77,6 +77,17 @@ class Settings:
     sql_log_enabled: bool = False
     sql_log_level: str = "INFO"
 
+    # Logging configuration (from global_config.yml LOG_CONFIG)
+    log_level: str = "INFO"
+    log_format: str = (
+        "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level>"
+        " | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan>"
+        " - <level>{message}</level>"
+    )
+    log_rotation: str = "1 day"
+    log_retention: str = "7 days"
+    log_compression: str = "zip"
+
     # Goofish endpoints (loaded from global_config.yml)
     websocket_url: str = "wss://wss-goofish.dingtalk.com/"
 
@@ -106,6 +117,7 @@ def load_settings(config_path: str = CONFIG_FILE) -> Settings:
     # Extract nested config values with safe defaults
     auto_reply_config = _as_mapping(raw.get("AUTO_REPLY", {}))
     api_config = _as_mapping(auto_reply_config.get("api", {}))
+    log_config = _as_mapping(raw.get("LOG_CONFIG", {}))
 
     # Build settings with env var overrides (env vars take precedence)
     settings = Settings(
@@ -132,6 +144,13 @@ def load_settings(config_path: str = CONFIG_FILE) -> Settings:
         enable_vnc=os.environ.get("ENABLE_VNC", "false").lower() == "true",
         sql_log_enabled=os.environ.get("SQL_LOG_ENABLED", "false").lower() == "true",
         sql_log_level=os.environ.get("SQL_LOG_LEVEL", "INFO"),
+        log_level=os.environ.get("LOG_LEVEL") or str(log_config.get("level", "INFO")),
+        log_format=str(log_config.get("format"))
+        if log_config.get("format")
+        else Settings.log_format,
+        log_rotation=str(log_config.get("rotation", "1 day")),
+        log_retention=str(log_config.get("retention", "7 days")),
+        log_compression=str(log_config.get("compression", "zip")),
         websocket_url=os.environ.get("WEBSOCKET_URL")
         or str(raw.get("WEBSOCKET_URL", "wss://wss-goofish.dingtalk.com/")),
         auto_reply_enabled=os.environ.get("AUTO_REPLY_ENABLED", "true").lower()
@@ -171,3 +190,32 @@ def validate_settings(settings: Settings) -> None:
             + "\n\nSet these environment variables before starting the app."
         )
         raise ValueError(error_msg)
+
+
+def apply_db_overrides(settings: Settings, db_path: str) -> None:
+    """Apply database-stored overrides to settings.
+
+    Reads ``admin_password_hash`` from the ``system_settings`` table and
+    overrides the default value loaded from env/YAML.  This ensures that
+    password changes made via the admin API persist across restarts.
+
+    Args:
+        settings: Mutable Settings instance to update in-place.
+        db_path: Path to the SQLite database.
+    """
+    import sqlite3
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT value FROM system_settings WHERE key = ?",
+            ("admin_password_hash",),
+        ).fetchone()
+        if row and row["value"]:
+            settings.admin_password_hash = str(row["value"])
+        conn.close()
+    except Exception:
+        # Database may not exist yet on first run — silently fall back to
+        # the default loaded from env/YAML.
+        pass

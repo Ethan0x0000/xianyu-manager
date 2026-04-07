@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from app.api.dependencies import get_runtime_settings
 from app.auth.sessions import SessionStore
 from app.bootstrap.app_factory import create_app
 from tests.helpers import make_settings
@@ -16,8 +17,9 @@ VALID_BCRYPT_HASH = "$2b$12$4r/djL8R15ywfXfEc0caDOYSTvfaF9.3D1ZeJYo0vQRT8JkRkfyQ
 
 class AppAuthRouteTests(unittest.TestCase):
     @staticmethod
-    def _make_client() -> TestClient:
-        app = create_app(settings=make_settings())
+    def _make_client(settings=None) -> TestClient:
+        effective_settings = settings or make_settings()
+        app = create_app(settings=effective_settings)
         return TestClient(app)
 
     def test_login_html_alias_served_by_spa_fallback(self) -> None:
@@ -54,27 +56,25 @@ class AppAuthRouteTests(unittest.TestCase):
         self.assertIn("bundled frontend", response.text)
 
     def test_login_info_status_enabled_for_default_admin_credentials(self) -> None:
-        client = self._make_client()
         settings = make_settings(
             admin_username="admin",
             admin_password_hash=VALID_BCRYPT_HASH,
         )
+        client = self._make_client(settings)
 
-        with patch("app.api.routers.auth.load_settings", return_value=settings):
-            response = client.get("/login-info-status")
+        response = client.get("/login-info-status")
 
         self.assertEqual(200, response.status_code)
         self.assertEqual({"enabled": True}, response.json())
 
     def test_login_info_status_disabled_for_custom_admin_credentials(self) -> None:
-        client = self._make_client()
         settings = make_settings(
             admin_username="custom-admin",
             admin_password_hash=VALID_BCRYPT_HASH,
         )
+        client = self._make_client(settings)
 
-        with patch("app.api.routers.auth.load_settings", return_value=settings):
-            response = client.get("/login-info-status")
+        response = client.get("/login-info-status")
 
         self.assertEqual(200, response.status_code)
         self.assertEqual({"enabled": False}, response.json())
@@ -82,14 +82,13 @@ class AppAuthRouteTests(unittest.TestCase):
     def test_legacy_verify_route_returns_authenticated_state_for_valid_session(
         self,
     ) -> None:
-        client = self._make_client()
+        settings = make_settings(admin_username="admin")
+        client = self._make_client(settings)
         store = SessionStore()
         _ = store.create_session("legacy-token", ttl_seconds=60)
-        settings = make_settings(admin_username="admin")
 
         with (
             patch("app.api.dependencies.get_session_store", return_value=store),
-            patch("app.api.routers.auth.load_settings", return_value=settings),
         ):
             response = client.get(
                 "/verify",

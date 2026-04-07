@@ -59,7 +59,8 @@ def _verify_password(password: str, password_hash: str) -> bool:
     if password_hash.startswith("pbkdf2_sha256$"):
         return _verify_pbkdf2_password(password, password_hash)
 
-    return secrets.compare_digest(password, password_hash)
+    # No plaintext fallback — reject unrecognised hash formats.
+    return False
 
 
 def _verify_bcrypt_password(password: str, password_hash: str) -> bool:

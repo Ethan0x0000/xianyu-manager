@@ -1,5 +1,7 @@
 import unittest
 
+import bcrypt
+
 from app.auth.service import create_session_token, verify_admin_login
 from tests.helpers import make_settings
 
@@ -15,19 +17,29 @@ class VerifyAdminLoginTests(unittest.TestCase):
 
         self.assertTrue(result)
 
-    def test_returns_true_for_matching_username_and_password_hash(self) -> None:
+    def test_returns_true_for_dynamically_hashed_password(self) -> None:
+        password = "my-secure-password"
+        hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        settings = make_settings(admin_password_hash=hashed)
+
+        result = verify_admin_login("testadmin", password, settings)
+
+        self.assertTrue(result)
+
+    def test_returns_false_for_plaintext_hash_no_fallback(self) -> None:
+        """Plaintext fallback was removed — unrecognised formats must be rejected."""
         settings = make_settings(admin_password_hash="expected-password")
 
         result = verify_admin_login("testadmin", "expected-password", settings)
 
-        self.assertTrue(result)
+        self.assertFalse(result)
 
     def test_returns_false_when_admin_username_is_empty(self) -> None:
         settings = make_settings(
-            admin_username="", admin_password_hash="expected-password"
+            admin_username="", admin_password_hash=VALID_BCRYPT_HASH
         )
 
-        result = verify_admin_login("testadmin", "expected-password", settings)
+        result = verify_admin_login("testadmin", "admin123", settings)
 
         self.assertFalse(result)
 
@@ -39,14 +51,14 @@ class VerifyAdminLoginTests(unittest.TestCase):
         self.assertFalse(result)
 
     def test_returns_false_for_wrong_username(self) -> None:
-        settings = make_settings(admin_password_hash="expected-password")
+        settings = make_settings(admin_password_hash=VALID_BCRYPT_HASH)
 
-        result = verify_admin_login("wrong-user", "expected-password", settings)
+        result = verify_admin_login("wrong-user", "admin123", settings)
 
         self.assertFalse(result)
 
     def test_returns_false_for_wrong_password(self) -> None:
-        settings = make_settings(admin_password_hash="stored-password-hash")
+        settings = make_settings(admin_password_hash=VALID_BCRYPT_HASH)
 
         result = verify_admin_login("testadmin", "wrong-password", settings)
 

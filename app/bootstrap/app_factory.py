@@ -14,8 +14,9 @@ from starlette.types import Scope
 from typing_extensions import override
 
 from app.api.routers import register_routers
+from app.bootstrap.logging_setup import setup_logging
 from app.bootstrap.runtime import RuntimeSupervisor
-from app.bootstrap.settings import Settings, load_settings
+from app.bootstrap.settings import Settings, apply_db_overrides, load_settings
 from app.db.schema import initialize_database
 from app.runtime.account_registry import get_registry
 from app.runtime.token_refresh import TokenRefreshService
@@ -113,6 +114,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     _prepare_database_path(settings.db_path)
     initialize_database(settings.db_path)
+
+    # Apply database-stored overrides (e.g. admin_password_hash persisted
+    # via the admin API) so they survive restarts.
+    apply_db_overrides(settings, settings.db_path)
+
+    # Configure loguru based on settings (reads LOG_CONFIG from YAML).
+    setup_logging(settings)
 
     container = build_container(settings=settings)
     runtime_supervisor = RuntimeSupervisor(container)
