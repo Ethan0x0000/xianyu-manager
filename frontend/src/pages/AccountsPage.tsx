@@ -104,6 +104,7 @@ type PasswordLoginStatusResponse = {
   cookie_count?: number
   verification_url?: string
   qr_code_url?: string
+  screenshot_path?: string
   verification_type?: string
   verification_message?: string
 }
@@ -115,6 +116,7 @@ const PASSWORD_STATUS_COLOR_MAP = {
   error: 'error',
   cancelled: 'default',
   expired: 'warning',
+  verification_required: 'warning',
 } as const
 
 const PASSWORD_STATUS_LABEL_MAP = {
@@ -124,6 +126,7 @@ const PASSWORD_STATUS_LABEL_MAP = {
   error: '登录异常',
   cancelled: '已取消',
   expired: '已过期',
+  verification_required: '需要验证',
 } as const
 
 function getPasswordStatusDisplay(status?: string): keyof typeof PASSWORD_STATUS_COLOR_MAP {
@@ -133,6 +136,7 @@ function getPasswordStatusDisplay(status?: string): keyof typeof PASSWORD_STATUS
     case 'error':
     case 'cancelled':
     case 'expired':
+    case 'verification_required':
       return status
     case 'processing':
     case 'pending':
@@ -619,8 +623,22 @@ export default function AccountsPage() {
       return
     }
 
+    if (statusPayload.status === 'verification_required') {
+      setPasswordSession((current) =>
+        current
+          ? {
+              ...current,
+              message: statusPayload.message ?? current.message ?? '需要身份验证，请完成验证后继续等待',
+              status: 'verification_required',
+            }
+          : current,
+      )
+      // Keep polling — verification may complete in the background
+      return
+    }
+
     const isPasswordFailureStatus = statusPayload.status === 'failed' || statusPayload.status === 'error'
-    const isUnhandledPasswordStatus = !['pending', 'processing', 'success', 'failed', 'error', 'cancelled', 'expired'].includes(
+    const isUnhandledPasswordStatus = !['pending', 'processing', 'success', 'failed', 'error', 'cancelled', 'expired', 'verification_required'].includes(
       statusPayload.status,
     )
 

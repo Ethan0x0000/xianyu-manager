@@ -201,11 +201,41 @@ class LoginService:
                     enable_learning=True,
                     headless=not session.show_browser,
                 )
+
+                def _on_verification_required(
+                    message: str,
+                    screenshot_path_or_none=None,
+                    frame_url: str | None = None,
+                    screenshot_path: str | None = None,
+                    **kwargs,
+                ):
+                    """Callback invoked by Playwright when QR/face verification is needed."""
+                    vtype = kwargs.get("verification_type", "unknown")
+                    # Normalise: sync callback signature is (msg, None, frame_url, screenshot_path, ...)
+                    actual_screenshot = screenshot_path or screenshot_path_or_none or ""
+                    actual_url = frame_url or ""
+
+                    session.status = "verification_required"
+                    session.message = message or "需要身份验证"
+                    session.verification_url = actual_url
+                    session.screenshot_path = actual_screenshot
+                    session.verification_type = vtype
+                    session.verification_message = message or ""
+                    logger.info(
+                        "[%s] Verification required: type=%s, screenshot=%s, url=%s",
+                        account_id,
+                        vtype,
+                        actual_screenshot[:80] if actual_screenshot else "",
+                        actual_url[:80] if actual_url else "",
+                    )
+
                 logger.info("[%s] Browser instance ready, starting login", account_id)
-                return slider_instance.login_with_password_headful(
+                return slider_instance.login_with_password_playwright(
                     account=session.username,
                     password=password,
                     show_browser=session.show_browser,
+                    notification_callback=_on_verification_required,
+                    force_clean_context=session.refresh_mode,
                 )
 
             session.message = "正在启动浏览器并执行登录..."
