@@ -22,7 +22,7 @@ function getErrorMessage(error: unknown) {
 export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const login = useAuthStore((state) => state.login)
+  const isInitializing = useAuthStore((state) => state.isInitializing)
   const verifyToken = useAuthStore((state) => state.verifyToken)
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const [loading, setLoading] = useState(false)
@@ -59,8 +59,7 @@ export default function LoginPage() {
     setErrorMessage(null)
 
     try {
-      const response = await loginApi(values)
-      login(response.token)
+      await loginApi(values)
 
       const verified = await verifyToken()
       if (!verified) {
@@ -74,6 +73,21 @@ export default function LoginPage() {
   }
 
   if (infoLoading) {
+    return (
+      <div
+        style={{
+          alignItems: 'center',
+          display: 'flex',
+          justifyContent: 'center',
+          minHeight: '100vh',
+        }}
+      >
+        <Spin />
+      </div>
+    )
+  }
+
+  if (isInitializing && !isAuthenticated) {
     return (
       <div
         style={{

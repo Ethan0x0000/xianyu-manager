@@ -12,11 +12,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+import bcrypt
+
 CONFIG_FILE = "global_config.yml"
 DEFAULT_ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_PASSWORD_HASH = (
-    "$2b$12$4r/djL8R15ywfXfEc0caDOYSTvfaF9.3D1ZeJYo0vQRT8JkRkfyQa"
-)
+DEFAULT_ADMIN_PASSWORD = "admin123"
+DEFAULT_ADMIN_PASSWORD_HASH = bcrypt.hashpw(
+    DEFAULT_ADMIN_PASSWORD.encode("utf-8"),
+    bcrypt.gensalt(),
+).decode("utf-8")
 
 
 def _as_mapping(value: object) -> dict[str, object]:

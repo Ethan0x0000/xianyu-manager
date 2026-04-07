@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Annotated, cast
 
-from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi import Cookie, FastAPI, Header, HTTPException, Request, status
 
+from app.auth.service import SESSION_COOKIE_NAME
 from app.bootstrap.settings import Settings
 from app.auth.sessions import get_session_store
 from app.bootstrap.settings import load_settings
@@ -39,16 +40,16 @@ def get_runtime_settings(request: Request) -> Settings:
 
 async def verify_token(
     authorization: Annotated[str | None, Header()] = None,
+    session_cookie: Annotated[str | None, Cookie(alias=SESSION_COOKIE_NAME)] = None,
 ) -> str:
-    """Verify bearer token from Authorization header."""
+    """Verify session token from Authorization header or secure cookie."""
     authorization = authorization or ""
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+    token = ""
+    if authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ").strip()
+    elif session_cookie:
+        token = session_cookie.strip()
 
-    token = authorization.removeprefix("Bearer ").strip()
     if not token or not get_session_store().validate_session(token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

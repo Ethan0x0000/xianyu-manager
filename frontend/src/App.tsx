@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { BrowserRouter } from 'react-router-dom'
+import AppErrorBoundary from './components/AppErrorBoundary'
 import RouterOutlet from './router'
 import QueryProvider from './providers/QueryProvider'
 import ThemeProvider from './providers/ThemeProvider'
@@ -36,7 +37,9 @@ function App() {
       <QueryProvider>
         <ThemeProvider>
           <AuthBootstrap>
-            <RouterOutlet />
+            <AppErrorBoundary>
+              <RouterOutlet />
+            </AppErrorBoundary>
           </AuthBootstrap>
         </ThemeProvider>
       </QueryProvider>

@@ -19,6 +19,9 @@ if TYPE_CHECKING:
     from app.bootstrap.settings import Settings
 
 
+SESSION_COOKIE_NAME = "xianyu_session"
+
+
 def verify_admin_login(username: str, password: str, settings: Settings) -> bool:
     """Verify admin login credentials against settings.
 
@@ -114,3 +117,6 @@ def create_session_token(secret_key: str) -> str:
     # Hex-encode to 64 characters for safe HTTP transmission
     # secret_key parameter reserved for future HMAC signing
     return secrets.token_hex(32)
+
+
+__all__ = ["SESSION_COOKIE_NAME", "create_session_token", "verify_admin_login"]

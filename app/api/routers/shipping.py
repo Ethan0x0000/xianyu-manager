@@ -87,6 +87,43 @@ def _require_delivery_rule_row(conn: sqlite3.Connection, rule_id: int) -> sqlite
     return row
 
 
+def _require_matching_card_account(card_row: sqlite3.Row, account_id: str) -> None:
+    card_account_id = str(cast(str | None, card_row["account_id"]) or "")
+    if card_account_id != account_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Card account does not match the requested account",
+        )
+
+
+def _item_account_id(conn: sqlite3.Connection, item_id: str) -> str | None:
+    row = cast(
+        sqlite3.Row | None,
+        conn.execute(
+            "SELECT account_id FROM items WHERE item_id = ? ORDER BY id DESC LIMIT 1",
+            (item_id,),
+        ).fetchone(),
+    )
+    if row is None:
+        return None
+    return str(cast(str | None, row["account_id"]) or "")
+
+
+def _require_matching_item_account(
+    conn: sqlite3.Connection,
+    item_id: str,
+    account_id: str,
+) -> None:
+    item_account_id = _item_account_id(conn, item_id)
+    if item_account_id is None:
+        return
+    if item_account_id != account_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Item account does not match the requested account",
+        )
+
+
 def _validate_yifan_content(content: str) -> None:
     try:
         parsed = cast(object, json.loads(content))
@@ -293,7 +330,9 @@ async def create_delivery_rule(
 ) -> dict[str, object]:
     del token
     with get_db(db_path) as conn:
-        _ = _require_card_row(conn, payload.card_id)
+        card_row = _require_card_row(conn, payload.card_id)
+        _require_matching_card_account(card_row, payload.account_id)
+        _require_matching_item_account(conn, payload.item_id, payload.account_id)
         cursor = conn.execute(
             """
             INSERT INTO delivery_rules (item_id, card_id, priority, enabled, account_id)
@@ -339,13 +378,13 @@ async def update_delivery_rule(
         )
 
     with get_db(db_path) as conn:
-        _ = _require_delivery_rule_row(conn, rule_id)
+        existing_rule = _require_delivery_rule_row(conn, rule_id)
+        rule_account_id = str(cast(str | None, existing_rule["account_id"]) or "")
         if payload.card_id is not None:
-            _ = _require_card_row(conn, payload.card_id)
-        cursor = conn.execute(
-            f"UPDATE delivery_rules SET {', '.join(assignments)} WHERE id = ?",
-            tuple([*params, rule_id]),
-        )
+            card_row = _require_card_row(conn, payload.card_id)
+            _require_matching_card_account(card_row, rule_account_id)
+        sql = "UPDATE delivery_rules SET " + ", ".join(assignments) + " WHERE id = ?"
+        cursor = conn.execute(sql, tuple([*params, rule_id]))
         if cursor.rowcount == 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

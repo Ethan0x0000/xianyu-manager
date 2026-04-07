@@ -18,8 +18,6 @@ vi.mock('../api/client', () => ({
     get: vi.fn(),
     post: vi.fn(),
   },
-  AUTH_TOKEN_STORAGE_KEY: 'auth_token',
-  getStoredAuthToken: vi.fn(),
 }))
 
 describe('LoginPage', () => {
@@ -28,7 +26,7 @@ describe('LoginPage', () => {
     localStorage.clear()
     useAuthStore.setState({
       isAuthenticated: false,
-      token: null,
+      isInitializing: false,
     })
     // Mock login-info-status endpoint to return disabled by default
     vi.mocked(client.apiClient.get).mockResolvedValue({
@@ -98,8 +96,8 @@ describe('LoginPage', () => {
 
   it('submits form with valid credentials and navigates to dashboard', async () => {
     const user = userEvent.setup()
-    vi.mocked(authApi.loginApi).mockResolvedValue({ token: 'valid-token' })
-    vi.mocked(authApi.verifyApi).mockResolvedValue({ username: 'admin' })
+    vi.mocked(authApi.loginApi).mockResolvedValue({ token: '' })
+    vi.mocked(authApi.verifyApi).mockResolvedValue({ is_admin: true, username: 'admin' })
 
     render(
       <MemoryRouter
@@ -216,7 +214,7 @@ describe('LoginPage', () => {
     })
 
     await act(async () => {
-      resolveLogin!({ token: 'valid-token' })
+      resolveLogin!({ token: '' })
     })
 
     await waitFor(() => {
@@ -228,7 +226,7 @@ describe('LoginPage', () => {
   it('redirects to dashboard if already authenticated', async () => {
     useAuthStore.setState({
       isAuthenticated: true,
-      token: 'existing-token',
+      isInitializing: false,
     })
 
     render(

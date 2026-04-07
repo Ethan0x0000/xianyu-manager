@@ -47,14 +47,20 @@ python Start.py
 
 ### Docker 部署
 ```bash
-# 编辑 docker-compose.yml 中的 SECRET_KEY 和 SECRET_ENCRYPTION_KEY
+# 先复制环境变量模板并填入你自己的高强度随机密钥
+cp .env.example .env
+
+# 编辑 .env，设置 SECRET_KEY 和 SECRET_ENCRYPTION_KEY
 docker compose up -d --build
 # 访问 http://localhost:8848
 ```
 
 ### 国内 Docker 部署
 ```bash
-# 编辑 docker-compose-cn.yml 中的 SECRET_KEY 和 SECRET_ENCRYPTION_KEY
+# 先复制环境变量模板并填入你自己的高强度随机密钥
+cp .env.example .env
+
+# 编辑 .env，设置 SECRET_KEY 和 SECRET_ENCRYPTION_KEY
 docker compose -f docker-compose-cn.yml up -d --build
 # 访问 http://localhost:8848
 ```

@@ -50,7 +50,7 @@ describe('SystemSettingsPage', () => {
     localStorage.clear()
     useAuthStore.setState({
       isAuthenticated: true,
-      token: 'valid-token',
+      isInitializing: false,
     })
     useThemeStore.setState({
       darkMode: false,

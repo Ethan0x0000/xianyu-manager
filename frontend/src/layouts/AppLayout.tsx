@@ -6,6 +6,7 @@ import {
   DashboardOutlined,
   DatabaseOutlined,
   InfoCircleOutlined,
+  LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   MessageOutlined,
@@ -22,6 +23,7 @@ import {
 import { Button, Input, Layout, Menu, Space, Typography, theme as antdTheme } from 'antd'
 import type { MenuProps } from 'antd'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../stores/authStore'
 import { useThemeStore } from '../stores/themeStore'
 
 const { Header, Content, Sider } = Layout
@@ -75,6 +77,7 @@ export default function AppLayout() {
   const themeColor = useThemeStore((state) => state.themeColor)
   const toggleDark = useThemeStore((state) => state.toggleDark)
   const setThemeColor = useThemeStore((state) => state.setThemeColor)
+  const logout = useAuthStore((state) => state.logout)
 
   const selectedKey = useMemo(() => getSelectedMenuKey(location.pathname), [location.pathname])
   const currentPageLabel = useMemo(() => {
@@ -181,6 +184,17 @@ export default function AppLayout() {
                 value={themeColor}
               />
             </Space>
+
+            <Button
+              aria-label="退出登录"
+              icon={<LogoutOutlined />}
+              onClick={() => {
+                void logout()
+              }}
+              type="default"
+            >
+              退出登录
+            </Button>
           </Space>
         </Header>
 

@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
@@ -123,14 +122,11 @@ describe('ItemSearchPage', () => {
   })
 
   it('validates the page count range before starting a search', async () => {
-    const user = userEvent.setup()
-
     renderWithProviders(<ItemSearchPage />)
 
     const pageCountInput = screen.getByRole('spinbutton', { name: '搜索页数' })
-    await user.type(screen.getByRole('textbox', { name: '搜索关键词' }), '耳机')
-    await user.clear(pageCountInput)
-    await user.type(pageCountInput, '11')
+    fireEvent.change(screen.getByRole('textbox', { name: '搜索关键词' }), { target: { value: '耳机' } })
+    fireEvent.change(pageCountInput, { target: { value: '11' } })
 
     fireEvent.click(screen.getByRole('button', { name: '开始搜索' }))
 

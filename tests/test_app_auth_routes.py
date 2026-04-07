@@ -5,9 +5,11 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
 from app.api.dependencies import get_runtime_settings
 from app.auth.sessions import SessionStore
+from app.api.routers.auth import _get_client_ip
 from app.bootstrap.app_factory import create_app
 from tests.helpers import make_settings
 
@@ -122,3 +124,94 @@ class AppAuthRouteTests(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertEqual({"success": True}, response.json())
         self.assertFalse(store.validate_session("legacy-token"))
+
+    def test_login_sets_http_only_cookie_and_verify_accepts_cookie(self) -> None:
+        settings = make_settings(
+            admin_username="admin",
+            admin_password_hash=VALID_BCRYPT_HASH,
+        )
+        client = self._make_client(settings)
+
+        login_response = client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123"},
+        )
+
+        self.assertEqual(200, login_response.status_code)
+        self.assertEqual({"token": ""}, login_response.json())
+        set_cookie_header = login_response.headers.get("set-cookie", "")
+        self.assertIn("HttpOnly", set_cookie_header)
+        self.assertIn("SameSite=lax", set_cookie_header)
+
+        verify_response = client.get("/api/auth/verify")
+
+        self.assertEqual(200, verify_response.status_code)
+        self.assertEqual("admin", verify_response.json()["username"])
+
+    def test_create_app_validates_required_settings(self) -> None:
+        with self.assertRaises(ValueError):
+            _ = create_app(
+                settings=make_settings(
+                    secret_key="",
+                    secret_encryption_key="",
+                )
+            )
+
+    def test_options_preflight_includes_cors_headers_for_allowed_origin(self) -> None:
+        client = self._make_client()
+
+        response = client.options(
+            "/api/auth/login",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(
+            "http://localhost:5173",
+            response.headers.get("access-control-allow-origin"),
+        )
+        self.assertEqual(
+            "true",
+            response.headers.get("access-control-allow-credentials"),
+        )
+
+    def test_get_client_ip_ignores_forwarded_header_from_untrusted_peer(self) -> None:
+        request = Request(
+            {
+                "type": "http",
+                "asgi": {"version": "3.0"},
+                "http_version": "1.1",
+                "method": "GET",
+                "scheme": "http",
+                "path": "/api/auth/login",
+                "raw_path": b"/api/auth/login",
+                "query_string": b"",
+                "headers": [(b"x-forwarded-for", b"1.2.3.4")],
+                "client": ("203.0.113.5", 3210),
+                "server": ("testserver", 80),
+            }
+        )
+
+        self.assertEqual("203.0.113.5", _get_client_ip(request))
+
+    def test_get_client_ip_accepts_forwarded_header_from_trusted_proxy(self) -> None:
+        request = Request(
+            {
+                "type": "http",
+                "asgi": {"version": "3.0"},
+                "http_version": "1.1",
+                "method": "GET",
+                "scheme": "http",
+                "path": "/api/auth/login",
+                "raw_path": b"/api/auth/login",
+                "query_string": b"",
+                "headers": [(b"x-forwarded-for", b"198.51.100.8")],
+                "client": ("127.0.0.1", 3210),
+                "server": ("testserver", 80),
+            }
+        )
+
+        self.assertEqual("198.51.100.8", _get_client_ip(request))

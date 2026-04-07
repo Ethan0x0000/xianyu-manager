@@ -15,7 +15,7 @@ describe('auth infrastructure', () => {
     localStorage.clear()
     useAuthStore.setState({
       isAuthenticated: false,
-      token: null,
+      isInitializing: false,
     })
   })
 
@@ -41,23 +41,64 @@ describe('auth infrastructure', () => {
     expect(screen.queryByText('仪表盘')).not.toBeInTheDocument()
   })
 
-  it('keeps a stored token after successful verification', async () => {
-    vi.mocked(authApi.verifyApi).mockResolvedValue({ username: 'admin' })
+  it('shows a loading gate while auth initialization is still in progress', () => {
+    useAuthStore.setState({
+      isAuthenticated: false,
+      isInitializing: true,
+    })
+
+    render(
+      <MemoryRouter
+        future={{
+          v7_relativeSplatPath: true,
+          v7_startTransition: true,
+        }}
+        initialEntries={['/dashboard']}
+      >
+        <Routes>
+          <Route path="/login" element={<div>登录页</div>} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<div>仪表盘</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('正在验证登录状态…')).toBeInTheDocument()
+    expect(screen.queryByText('登录页')).not.toBeInTheDocument()
+    expect(screen.queryByText('仪表盘')).not.toBeInTheDocument()
+  })
+
+  it('keeps auth state in memory after successful verification without localStorage', async () => {
+    vi.mocked(authApi.verifyApi).mockResolvedValue({ is_admin: true, username: 'admin' })
 
     await act(async () => {
-      useAuthStore.getState().login('valid-token')
       await useAuthStore.getState().verifyToken()
     })
 
     await waitFor(() => {
-      expect(useAuthStore.getState().token).toBe('valid-token')
       expect(useAuthStore.getState().isAuthenticated).toBe(true)
-      expect(localStorage.getItem('auth_token')).toBe('valid-token')
+      expect(useAuthStore.getState().isInitializing).toBe(false)
+      expect(localStorage.getItem('auth_token')).toBeNull()
     })
   })
 
-  it('clears an invalid stored token during hydration', async () => {
-    localStorage.setItem('auth_token', 'expired-token')
+  it('hydrates from the server session even when no local token exists', async () => {
+    vi.mocked(authApi.verifyApi).mockResolvedValue({ is_admin: true, username: 'admin' })
+
+    await act(async () => {
+      await useAuthStore.getState().hydrate()
+    })
+
+    await waitFor(() => {
+      expect(authApi.verifyApi).toHaveBeenCalledTimes(1)
+      expect(useAuthStore.getState().isAuthenticated).toBe(true)
+      expect(useAuthStore.getState().isInitializing).toBe(false)
+      expect(localStorage.getItem('auth_token')).toBeNull()
+    })
+  })
+
+  it('clears auth state when server-side session verification fails during hydration', async () => {
     vi.mocked(authApi.verifyApi).mockRejectedValue({ response: { status: 401 } })
 
     await act(async () => {
@@ -65,8 +106,8 @@ describe('auth infrastructure', () => {
     })
 
     await waitFor(() => {
-      expect(useAuthStore.getState().token).toBeNull()
       expect(useAuthStore.getState().isAuthenticated).toBe(false)
+      expect(useAuthStore.getState().isInitializing).toBe(false)
       expect(localStorage.getItem('auth_token')).toBeNull()
     })
   })

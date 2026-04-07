@@ -123,7 +123,7 @@ export default function SystemSettingsPage() {
   const [passwordForm] = Form.useForm<PasswordFormValues>()
   const { token } = antdTheme.useToken()
 
-  const isAuthorized = useAuthStore((state) => state.isAuthenticated || Boolean(state.token))
+  const isAuthorized = useAuthStore((state) => state.isAuthenticated)
   const currentThemeColor = useThemeStore((state) => state.themeColor)
   const persistThemeColor = useThemeStore((state) => state.setThemeColor)
 

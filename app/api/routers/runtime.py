@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 import logging
 import os
 import sqlite3
@@ -492,7 +493,10 @@ async def reload_cache(
     token: Annotated[str, Depends(verify_token)],
 ) -> dict[str, object]:
     del token
-    return {"success": True, "reloaded": True}
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Cache reload is not implemented in the dev branch yet",
+    )
 
 
 @router.post("/api/update/restart", include_in_schema=False)
@@ -500,7 +504,10 @@ async def restart_system(
     token: Annotated[str, Depends(verify_token)],
 ) -> dict[str, object]:
     del token
-    return {"success": True, "restarting": True}
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="System restart is not implemented in the dev branch yet",
+    )
 
 
 @router.post("/api/runtime/cache/clear")
@@ -508,7 +515,10 @@ async def runtime_cache_clear(
     token: Annotated[str, Depends(verify_token)],
 ) -> dict[str, object]:
     del token
-    return {"success": True, "reloaded": True}
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Runtime cache clear is not implemented in the dev branch yet",
+    )
 
 
 @router.post("/api/runtime/restart")
@@ -516,7 +526,10 @@ async def runtime_restart(
     token: Annotated[str, Depends(verify_token)],
 ) -> dict[str, object]:
     del token
-    return {"success": True, "restarting": True}
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Runtime restart is not implemented in the dev branch yet",
+    )
 
 
 @router.post("/items/search_multiple", include_in_schema=False)
@@ -524,7 +537,10 @@ async def search_items_stub(
     token: Annotated[str, Depends(verify_token)],
 ) -> dict[str, object]:
     del token
-    return {"success": True, "data": [], "total": 0, "need_captcha": False}
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Legacy multi-page item search is not implemented in the dev branch yet",
+    )
 
 
 @router.post("/api/item-search/start")
@@ -532,13 +548,10 @@ async def start_item_search(
     token: Annotated[str, Depends(verify_token)],
 ) -> dict[str, object]:
     del token
-    return {
-        "success": True,
-        "data": [],
-        "total": 0,
-        "need_captcha": False,
-        "task_id": uuid4().hex,
-    }
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Item search task startup is not implemented in the dev branch yet",
+    )
 
 
 @router.get("/admin/risk-control-logs", include_in_schema=False)
@@ -671,19 +684,20 @@ async def legacy_captcha_status(session_id: str) -> dict[str, object]:
     }
 
 
-@router.get("/api/captcha/control/{session_id}", include_in_schema=False)
+@router.get("/api/captcha/control/{session_id:path}", include_in_schema=False)
 async def legacy_captcha_control(
     session_id: str,
     embed: bool = False,
 ) -> HTMLResponse:
     del embed
+    safe_session_id = escape(session_id)
     html = f"""
     <html>
       <head><title>Captcha Control</title></head>
       <body>
         <main>
           <h1>Captcha session ready</h1>
-          <p>session_id: {session_id}</p>
+          <p>session_id: {safe_session_id}</p>
         </main>
       </body>
     </html>

@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import ThemeProvider from '../providers/ThemeProvider'
 import AppLayout from '../layouts/AppLayout'
+import { useAuthStore } from '../stores/authStore'
 import { useThemeStore } from '../stores/themeStore'
 
 const MENU_LABELS = [
@@ -60,6 +61,11 @@ describe('AppLayout', () => {
       darkMode: false,
       themeColor: '#1890ff',
     })
+    useAuthStore.setState({
+      isAuthenticated: true,
+      isInitializing: false,
+      logout: vi.fn().mockResolvedValue(undefined),
+    })
   })
 
   it('renders all 15 sidebar menu items and highlights the current route', async () => {
@@ -106,5 +112,25 @@ describe('AppLayout', () => {
 
     expect(screen.getByTestId('theme-color-value')).toHaveTextContent('#1890ff')
     expect(localStorage.getItem('themeColor')).toBe('#1890ff')
+  })
+
+  it('renders a logout button and delegates to the auth store logout action', async () => {
+    const user = userEvent.setup()
+    const logout = vi.fn().mockResolvedValue(undefined)
+    useAuthStore.setState({
+      isAuthenticated: true,
+      isInitializing: false,
+      logout,
+    })
+
+    renderAppLayout('/dashboard')
+
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: '退出登录' }))
+    })
+
+    await waitFor(() => {
+      expect(logout).toHaveBeenCalledTimes(1)
+    })
   })
 })

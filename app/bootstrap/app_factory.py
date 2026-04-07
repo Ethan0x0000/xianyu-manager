@@ -6,8 +6,10 @@ import shutil
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
+import os
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import Scope
@@ -16,7 +18,12 @@ from typing_extensions import override
 from app.api.routers import register_routers
 from app.bootstrap.logging_setup import setup_logging
 from app.bootstrap.runtime import RuntimeSupervisor
-from app.bootstrap.settings import Settings, apply_db_overrides, load_settings
+from app.bootstrap.settings import (
+    Settings,
+    apply_db_overrides,
+    load_settings,
+    validate_settings,
+)
 from app.db.schema import initialize_database
 from app.runtime.account_registry import get_registry
 from app.runtime.token_refresh import TokenRefreshService
@@ -81,6 +88,20 @@ def _prepare_database_path(db_path: str) -> None:
         _ = shutil.move(str(legacy_db_path), str(resolved_db_path))
 
 
+def _resolve_cors_origins(settings: Settings) -> list[str]:
+    configured = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+    if configured.strip():
+        return [origin.strip() for origin in configured.split(",") if origin.strip()]
+
+    localhost_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        f"http://localhost:{settings.api_port}",
+        f"http://127.0.0.1:{settings.api_port}",
+    ]
+    return localhost_origins
+
+
 def build_container(
     test_mode: bool = False,
     settings: Settings | None = None,
@@ -112,6 +133,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     """Create and configure the FastAPI application."""
 
     settings = settings or load_settings()
+    validate_settings(settings)
     _prepare_database_path(settings.db_path)
     initialize_database(settings.db_path)
 
@@ -140,6 +162,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_resolve_cors_origins(settings),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     frontend_dir = _resolve_frontend_dir(settings)

@@ -2,13 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import App from './App'
 
+vi.mock('./api/auth', () => ({
+  verifyApi: vi.fn().mockRejectedValue({ response: { status: 401 } }),
+}))
+
 vi.mock('./api/client', () => ({
   apiClient: {
     get: vi.fn(),
     post: vi.fn(),
   },
-  AUTH_TOKEN_STORAGE_KEY: 'auth_token',
-  getStoredAuthToken: vi.fn(),
 }))
 
 import { apiClient } from './api/client'

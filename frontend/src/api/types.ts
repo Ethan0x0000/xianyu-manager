@@ -8,6 +8,8 @@ export type LoginResponse = {
 }
 
 export type VerifyResponse = {
+  authenticated?: boolean
+  is_admin?: boolean
   username: string
 }
 

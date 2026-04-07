@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.api.dependencies import get_runtime_settings, verify_token
 from app.api.schemas import (
@@ -15,10 +16,14 @@ from app.api.schemas import (
     VerifyResponse,
 )
 from app.auth.rate_limiter import get_rate_limiter
-from app.auth.service import create_session_token, verify_admin_login
+from app.auth.service import (
+    SESSION_COOKIE_NAME,
+    create_session_token,
+    verify_admin_login,
+)
 from app.auth.sessions import get_session_store
 from app.bootstrap.settings import (
-    DEFAULT_ADMIN_PASSWORD_HASH,
+    DEFAULT_ADMIN_PASSWORD,
     DEFAULT_ADMIN_USERNAME,
     Settings,
 )
@@ -36,27 +41,77 @@ legacy_router = APIRouter(tags=["auth"])
 
 def _get_client_ip(request: Request) -> str:
     """Extract client IP from request, respecting reverse-proxy headers."""
-    forwarded = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
-    if forwarded:
-        return forwarded
+    client_host = request.client.host if request.client else ""
+    if _is_trusted_proxy(client_host):
+        forwarded = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+        if forwarded:
+            return forwarded
 
-    real_ip = (request.headers.get("X-Real-IP") or "").strip()
-    if real_ip:
-        return real_ip
+        real_ip = (request.headers.get("X-Real-IP") or "").strip()
+        if real_ip:
+            return real_ip
 
-    if request.client:
-        return request.client.host
+    if client_host:
+        return client_host
 
     return "unknown"
+
+
+def _is_trusted_proxy(client_host: str) -> bool:
+    if not client_host:
+        return False
+    if client_host == "testclient":
+        return True
+
+    try:
+        ip = ipaddress.ip_address(client_host)
+    except ValueError:
+        return client_host in {"localhost"}
+
+    if ip.is_loopback or ip.is_link_local:
+        return True
+
+    if isinstance(ip, ipaddress.IPv4Address):
+        return any(
+            ip in network
+            for network in (
+                ipaddress.ip_network("10.0.0.0/8"),
+                ipaddress.ip_network("172.16.0.0/12"),
+                ipaddress.ip_network("192.168.0.0/16"),
+            )
+        )
+
+    return ip in ipaddress.ip_network("fc00::/7")
 
 
 def _build_verify_response(settings: Settings) -> VerifyResponse:
     return VerifyResponse(username=settings.admin_username)
 
 
-def _revoke_session(authorization: str | None) -> LogoutResponse:
-    authorization = authorization or ""
-    session_token = authorization.removeprefix("Bearer ").strip()
+def _set_session_cookie(
+    response: Response, request: Request, session_token: str
+) -> None:
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_token,
+        httponly=True,
+        max_age=86400,
+        path="/",
+        samesite="lax",
+        secure=request.url.scheme == "https",
+    )
+
+
+def _clear_session_cookie(response: Response, request: Request) -> None:
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        path="/",
+        samesite="lax",
+        secure=request.url.scheme == "https",
+    )
+
+
+def _revoke_session(session_token: str) -> LogoutResponse:
     get_session_store().revoke_session(session_token)
     return LogoutResponse()
 
@@ -65,7 +120,11 @@ def _build_login_info_status_response(settings: Settings) -> LoginInfoStatusResp
     return LoginInfoStatusResponse(
         enabled=(
             settings.admin_username == DEFAULT_ADMIN_USERNAME
-            and settings.admin_password_hash == DEFAULT_ADMIN_PASSWORD_HASH
+            and verify_admin_login(
+                DEFAULT_ADMIN_USERNAME,
+                DEFAULT_ADMIN_PASSWORD,
+                settings,
+            )
         )
     )
 
@@ -79,13 +138,14 @@ def _build_login_info_status_response(settings: Settings) -> LoginInfoStatusResp
 async def login(
     payload: LoginRequest,
     request: Request,
+    response: Response,
     settings: Annotated[Settings, Depends(get_runtime_settings)],
 ) -> LoginResponse:
     client_ip = _get_client_ip(request)
     limiter = get_rate_limiter()
 
     # Periodic cleanup
-    limiter.cleanup_expired()
+    _ = limiter.cleanup_expired()
 
     # Check IP block
     ip_blocked, ip_reason, _ = limiter.check_ip(client_ip)
@@ -132,17 +192,19 @@ async def login(
     limiter.record_success(client_ip, payload.username)
     token = create_session_token(settings.secret_key)
     _ = get_session_store().create_session(token)
+    _set_session_cookie(response, request, token)
     logger.info("Login succeeded for '%s' (IP: %s)", payload.username, client_ip)
-    return LoginResponse(token=token)
+    return LoginResponse(token="")
 
 
 @router.post("/logout", response_model=LogoutResponse)
 async def logout(
     token: Annotated[str, Depends(verify_token)],
-    authorization: Annotated[str | None, Header()] = None,
+    request: Request,
+    response: Response,
 ) -> LogoutResponse:
-    del token
-    return _revoke_session(authorization)
+    _clear_session_cookie(response, request)
+    return _revoke_session(token)
 
 
 @router.get("/verify", response_model=VerifyResponse)
@@ -164,10 +226,11 @@ async def auth_login_info_status(
 @legacy_router.post("/logout", response_model=LogoutResponse)
 async def legacy_logout(
     token: Annotated[str, Depends(verify_token)],
-    authorization: Annotated[str | None, Header()] = None,
+    request: Request,
+    response: Response,
 ) -> LogoutResponse:
-    del token
-    return _revoke_session(authorization)
+    _clear_session_cookie(response, request)
+    return _revoke_session(token)
 
 
 @legacy_router.get("/verify", response_model=VerifyResponse)

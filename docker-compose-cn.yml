@@ -17,24 +17,24 @@ services:
       - ./backups:/app/backups:rw
       - .:/app:rw
     environment:
-      - PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-1}
-      - PYTHONDONTWRITEBYTECODE=${PYTHONDONTWRITEBYTECODE:-1}
-      - TZ=${TZ:-Asia/Shanghai}
-      - DB_PATH=${DB_PATH:-/app/data/xianyu_data.db}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      PYTHONUNBUFFERED: ${PYTHONUNBUFFERED:-1}
+      PYTHONDONTWRITEBYTECODE: ${PYTHONDONTWRITEBYTECODE:-1}
+      TZ: ${TZ:-Asia/Shanghai}
+      DB_PATH: ${DB_PATH:-/app/data/xianyu_data.db}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
-      # 必填密钥
-      - SECRET_KEY=${SECRET_KEY:-}
-      - SECRET_ENCRYPTION_KEY=${SECRET_ENCRYPTION_KEY:-}
+      # 必填密钥：必须通过 .env 或宿主环境显式提供，避免容器在应用启动后才因缺失崩溃
+      SECRET_KEY: "${SECRET_KEY:?Set SECRET_KEY in .env or your shell before running docker compose}"
+      SECRET_ENCRYPTION_KEY: "${SECRET_ENCRYPTION_KEY:?Set SECRET_ENCRYPTION_KEY in .env or your shell before running docker compose}"
 
       # 功能开关
-      - AUTO_REPLY_ENABLED=${AUTO_REPLY_ENABLED:-true}
-      - AUTO_SHIPPING_ENABLED=${AUTO_SHIPPING_ENABLED:-true}
-      - AUTO_CONFIRM_ENABLED=${AUTO_CONFIRM_ENABLED:-true}
-      - AI_ENABLED=${AI_ENABLED:-false}
+      AUTO_REPLY_ENABLED: ${AUTO_REPLY_ENABLED:-true}
+      AUTO_SHIPPING_ENABLED: ${AUTO_SHIPPING_ENABLED:-true}
+      AUTO_CONFIRM_ENABLED: ${AUTO_CONFIRM_ENABLED:-true}
+      AI_ENABLED: ${AI_ENABLED:-false}
 
       # WebSocket
-      - WEBSOCKET_URL=${WEBSOCKET_URL:-wss://wss-goofish.dingtalk.com/}
+      WEBSOCKET_URL: ${WEBSOCKET_URL:-wss://wss-goofish.dingtalk.com/}
 
     networks:
       - xianyu-network

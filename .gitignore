@@ -96,3 +96,7 @@ nuitka-crash-report*.xml
 
 # Docker override
 docker-compose.override.yml
+
+
+# Dev plans
+dev_plans/

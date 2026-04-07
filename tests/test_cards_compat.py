@@ -315,3 +315,74 @@ def test_delete_missing_card_returns_404(compat_client: tuple[TestClient, str]) 
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Card not found"}
+
+
+def test_create_delivery_rule_rejects_cross_account_card_binding(
+    compat_client: tuple[TestClient, str],
+) -> None:
+    client, db_path = compat_client
+    foreign_card_id = _insert_card(
+        db_path,
+        name="Foreign card",
+        content_type="text",
+        content="cross-account",
+        account_id="acct-2",
+    )
+
+    response = client.post(
+        "/api/delivery/rules",
+        headers=_auth_headers(),
+        json={
+            "item_id": "item-1",
+            "card_id": foreign_card_id,
+            "priority": 1,
+            "enabled": True,
+            "account_id": "acct-1",
+        },
+    )
+
+    assert response.status_code == 403
+    assert "account" in cast(str, response.json()["detail"]).lower()
+
+
+def test_update_delivery_rule_rejects_cross_account_card_swap(
+    compat_client: tuple[TestClient, str],
+) -> None:
+    client, db_path = compat_client
+    own_card_id = _insert_card(
+        db_path,
+        name="Own card",
+        content_type="text",
+        content="self",
+        account_id="acct-1",
+    )
+    foreign_card_id = _insert_card(
+        db_path,
+        name="Foreign card",
+        content_type="text",
+        content="other",
+        account_id="acct-2",
+    )
+
+    create_response = client.post(
+        "/api/delivery/rules",
+        headers=_auth_headers(),
+        json={
+            "item_id": "item-1",
+            "card_id": own_card_id,
+            "priority": 1,
+            "enabled": True,
+            "account_id": "acct-1",
+        },
+    )
+    assert create_response.status_code == 201
+
+    rule_id = cast(int, create_response.json()["id"])
+    update_response = client.put(
+        f"/api/delivery/rules/{rule_id}",
+        headers=_auth_headers(),
+        json={"card_id": foreign_card_id},
+    )
+
+    assert update_response.status_code == 403
+    assert "account" in cast(str, update_response.json()["detail"]).lower()

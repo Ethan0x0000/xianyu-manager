@@ -5,11 +5,13 @@ from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
 from typing import cast
+from urllib.parse import quote
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from httpx import Response
 from PIL import Image
+import pytest
 
 from app.auth.sessions import SessionStore
 from app.bootstrap.app_factory import create_app
@@ -87,3 +89,34 @@ def test_orders_stream_uses_sse_content_type_and_emits_ready_event() -> None:
     assert response.headers["content-type"].startswith("text/event-stream")
     assert "event: stream.ready" in response.text
     assert "data:" in response.text
+
+
+def test_legacy_captcha_control_escapes_session_id() -> None:
+    with _auth_client() as client:
+        malicious_session_id = quote('<script>alert("xss")</script>', safe="")
+        response = client.get(f"/api/captcha/control/{malicious_session_id}")
+
+    assert response.status_code == 200
+    assert "<script>" not in response.text
+    assert "&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;" in response.text
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("post", "/system/reload-cache"),
+        ("post", "/api/runtime/cache/clear"),
+        ("post", "/api/runtime/restart"),
+        ("post", "/items/search_multiple"),
+        ("post", "/api/item-search/start"),
+    ],
+)
+def test_stubbed_runtime_endpoints_fail_explicitly(
+    method: str,
+    path: str,
+) -> None:
+    with _auth_client() as client:
+        response = getattr(client, method)(path, headers=_auth_headers())
+
+    assert response.status_code == 501
+    assert "not implemented" in cast(str, response.json()["detail"]).lower()
