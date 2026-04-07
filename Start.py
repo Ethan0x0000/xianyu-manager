@@ -44,13 +44,14 @@ def create_listen_sockets(host: str, port: int) -> list[socket.socket] | None:
 
 
 def run_server(app: Callable[..., object] | str, settings: Settings) -> None:
+    effective_log_level = settings.log_level.lower()
     listen_sockets = create_listen_sockets(settings.api_host, settings.api_port)
     if listen_sockets is None:
         uvicorn.run(
             app,
             host=settings.api_host,
             port=settings.api_port,
-            log_level="info",
+            log_level=effective_log_level,
         )
         return
 
@@ -58,7 +59,7 @@ def run_server(app: Callable[..., object] | str, settings: Settings) -> None:
         app,
         host=settings.api_host,
         port=settings.api_port,
-        log_level="info",
+        log_level=effective_log_level,
     )
     server = uvicorn.Server(config)
     try:

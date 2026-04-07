@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 import sqlite3
 from typing import Annotated, cast
@@ -25,6 +26,8 @@ from app.runtime.account_registry import get_registry
 from app.services.login_service import LoginService, LoginValidationError
 from app.shared.types import ServiceKey
 from utils.refresh_util import refresh_token
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["accounts"])
 
@@ -233,6 +236,12 @@ async def create_password_login_session(
     db_path: Annotated[str, Depends(get_db_path)],
 ) -> PasswordLoginCreateResponse:
     del token
+    logger.info(
+        "[%s] Password login request received (refresh=%s, show_browser=%s)",
+        payload.account_id,
+        payload.refresh_mode,
+        payload.show_browser,
+    )
     row = _require_account_row(db_path, payload.account_id)
     username, password = _resolve_password_credentials(row, payload)
     service = _get_login_service(request)
@@ -243,13 +252,24 @@ async def create_password_login_session(
             password=password,
             refresh_mode=payload.refresh_mode,
             show_browser=payload.show_browser,
+            db_path=db_path,
         )
     except LoginValidationError as exc:
+        logger.warning(
+            "[%s] Password login validation failed: %s",
+            payload.account_id,
+            exc,
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 
+    logger.info(
+        "[%s] Password login session started: %s",
+        payload.account_id,
+        session.session_id,
+    )
     return PasswordLoginCreateResponse(
         session_id=session.session_id,
         status=session.status,
@@ -265,7 +285,6 @@ async def get_password_login_status(
     session_id: str,
     request: Request,
     token: Annotated[str, Depends(verify_token)],
-    db_path: Annotated[str, Depends(get_db_path)],
 ) -> PasswordLoginStatusResponse:
     del token
     service = _get_login_service(request)
@@ -277,19 +296,57 @@ async def get_password_login_status(
         )
 
     session_status = "expired" if session.is_expired else session.status
-    if session_status == "success" and session.result_cookie:
-        _ = _update_account_cookie(db_path, session.account_id, session.result_cookie)
+    # Cookie persistence is now handled by the background task in login_service.
+    # This endpoint is read-only for password login status.
 
     return PasswordLoginStatusResponse(
         session_id=session.session_id,
         status=session_status,
         message=session.message,
         result_cookie=session.result_cookie,
+        cookie_valid=bool(session.result_cookie and session.status == "success"),
+        cookie_count=session.result_cookie.count("=") if session.result_cookie else 0,
         verification_url=session.verification_url,
         qr_code_url=session.qr_code_url,
         screenshot_path=session.screenshot_path,
         verification_type=session.verification_type,
         verification_message=session.verification_message,
+    )
+
+
+@router.delete(
+    "/password-login/{session_id}",
+    response_model=PasswordLoginStatusResponse,
+)
+async def cancel_password_login_session(
+    session_id: str,
+    request: Request,
+    token: Annotated[str, Depends(verify_token)],
+) -> PasswordLoginStatusResponse:
+    """Cancel an active password-login session."""
+    del token
+    service = _get_login_service(request)
+    cancelled = service.cancel_password_session(session_id)
+    if not cancelled:
+        session = service.get_password_session(session_id)
+        if session is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Password login session not found",
+            )
+        # Session exists but is already in a terminal state — return current status
+        return PasswordLoginStatusResponse(
+            session_id=session.session_id,
+            status=session.status,
+            message=session.message,
+        )
+
+    session = service.get_password_session(session_id)
+    assert session is not None  # cancel succeeded, so session exists
+    return PasswordLoginStatusResponse(
+        session_id=session.session_id,
+        status=session.status,
+        message=session.message,
     )
 
 

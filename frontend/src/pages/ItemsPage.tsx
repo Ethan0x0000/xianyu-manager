@@ -2,8 +2,11 @@ import { useMemo, useState } from 'react'
 import axios, { type AxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Alert,
+  Badge,
   Button,
   Card,
+  Empty,
   Form,
   Input,
   InputNumber,
@@ -12,7 +15,6 @@ import {
   Select,
   Space,
   Table,
-  Tag,
   Typography,
   message,
 } from 'antd'
@@ -53,6 +55,12 @@ type EditItemFormValues = {
 
 const PAGE_SIZE = 20
 
+const STATUS_OPTIONS = [
+  { label: '在售', value: 'online' },
+  { label: '下架', value: 'offline' },
+  { label: '已售', value: 'sold' },
+]
+
 function normalizeAccounts(payload: AccountsResponse | undefined) {
   if (Array.isArray(payload)) {
     return payload
@@ -72,6 +80,41 @@ function getErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback
+}
+
+function getBadgeStatus(status: string) {
+  switch (status) {
+    case 'online':
+      return 'success'
+    case 'offline':
+      return 'default'
+    case 'sold':
+      return 'warning'
+    default:
+      return 'processing'
+  }
+}
+
+function getStatusLabel(status: string) {
+  switch (status) {
+    case 'online':
+      return '在售'
+    case 'offline':
+      return '下架'
+    case 'sold':
+      return '已售'
+    default:
+      return status
+  }
+}
+
+function formatPrice(value: number | string) {
+  const num = Number(value)
+  if (Number.isNaN(num)) {
+    return String(value)
+  }
+
+  return `¥ ${num.toFixed(2)}`
 }
 
 export default function ItemsPage() {
@@ -148,7 +191,7 @@ export default function ItemsPage() {
       messageApi.error(getErrorMessage(error, '删除商品失败'))
     },
     onSuccess: async (_, variables) => {
-      messageApi.success(variables.item_ids.length > 1 ? '批量删除成功' : '商品已删除')
+      messageApi.success(variables.item_ids.length > 1 ? `批量删除成功（${variables.item_ids.length} 件）` : '商品已删除')
       setSelectedItems((current) => current.filter((item) => !variables.item_ids.includes(item.item_id)))
       await refreshItems()
     },
@@ -169,11 +212,13 @@ export default function ItemsPage() {
   })
 
   const accountOptions = useMemo(
-    () =>
-      (accountsQuery.data ?? []).map((account) => ({
+    () => [
+      { label: '全部账号', value: '' },
+      ...(accountsQuery.data ?? []).map((account) => ({
         label: account.username ? `${account.username} (${account.account_id})` : account.account_id,
         value: account.account_id,
       })),
+    ],
     [accountsQuery.data],
   )
 
@@ -226,6 +271,18 @@ export default function ItemsPage() {
     })
   }
 
+  const handleBatchDelete = () => {
+    if (!batchDeleteAccountId) {
+      messageApi.error('请先选择账号或勾选同一账号下的商品')
+      return
+    }
+
+    deleteMutation.mutate({
+      account_id: batchDeleteAccountId,
+      item_ids: selectedItems.map((item) => item.item_id),
+    })
+  }
+
   const columns: ColumnsType<ItemRecord> = [
     {
       dataIndex: 'item_id',
@@ -237,20 +294,21 @@ export default function ItemsPage() {
       dataIndex: 'title',
       key: 'title',
       title: '标题',
+      ellipsis: true,
     },
     {
       dataIndex: 'price',
       key: 'price',
       title: '价格',
       width: 120,
-      render: (value: ItemRecord['price']) => String(value),
+      render: (value: ItemRecord['price']) => formatPrice(value),
     },
     {
       dataIndex: 'status',
       key: 'status',
       title: '状态',
       width: 120,
-      render: (value: string) => <Tag color="blue">{value}</Tag>,
+      render: (value: string) => <Badge status={getBadgeStatus(value)} text={getStatusLabel(value)} />,
     },
     {
       dataIndex: 'account_id',
@@ -263,7 +321,7 @@ export default function ItemsPage() {
       key: 'updated_at',
       title: '更新时间',
       width: 190,
-      render: (value?: string | null) => value || '-',
+      render: (value?: string | null) => value || '—',
     },
     {
       key: 'actions',
@@ -275,9 +333,9 @@ export default function ItemsPage() {
             编辑
           </Button>
           <Popconfirm
+            cancelText="取消"
             okText="确认"
             title="确认删除该商品吗？"
-            cancelText="取消"
             onConfirm={() => handleDeleteItems([record])}
           >
             <Button danger size="small" type="link">
@@ -290,20 +348,36 @@ export default function ItemsPage() {
   ]
 
   return (
-    <>
+    <Space direction="vertical" size="large" style={{ display: 'flex' }}>
       {contextHolder}
+
+      <div>
+        <Typography.Title level={3} style={{ marginBottom: 8, marginTop: 0 }}>
+          商品管理
+        </Typography.Title>
+        <Typography.Paragraph style={{ marginBottom: 0 }} type="secondary">
+          查看与管理所有闲鱼商品，支持按账号与关键字筛选、编辑、同步与批量删除。
+        </Typography.Paragraph>
+      </div>
+
+      {accountsQuery.isError ? (
+        <Alert message="账号列表加载失败" showIcon type="error" description={getErrorMessage(accountsQuery.error, '请稍后重试')} />
+      ) : null}
+
+      {itemsQuery.isError ? (
+        <Alert message="商品数据加载失败" showIcon type="error" description={getErrorMessage(itemsQuery.error, '请稍后重试')} />
+      ) : null}
+
       <Card
-        title="商品管理"
         extra={
           <Space wrap>
             <Select
-              allowClear
+              aria-label="账号筛选"
               loading={accountsQuery.isLoading}
               onChange={(value) => handleAccountChange(value ?? '')}
               options={accountOptions}
-              placeholder="选择账号"
               style={{ width: 240 }}
-              value={selectedAccountId || undefined}
+              value={selectedAccountId}
             />
             <Input
               allowClear
@@ -324,21 +398,11 @@ export default function ItemsPage() {
               同步商品
             </Button>
             <Popconfirm
-              okText="确认"
-              title="确认批量删除选中的商品吗？"
               cancelText="取消"
               disabled={selectedItems.length === 0}
-              onConfirm={() => {
-                if (!batchDeleteAccountId) {
-                  messageApi.error('请先选择账号或勾选同一账号下的商品')
-                  return
-                }
-
-                deleteMutation.mutate({
-                  account_id: batchDeleteAccountId,
-                  item_ids: selectedItems.map((item) => item.item_id),
-                })
-              }}
+              okText="确认"
+              onConfirm={handleBatchDelete}
+              title="确认批量删除选中的商品吗？"
             >
               <Button disabled={selectedItems.length === 0} loading={deleteMutation.isPending}>
                 批量删除
@@ -346,15 +410,19 @@ export default function ItemsPage() {
             </Popconfirm>
           </Space>
         }
+        title="商品列表"
       >
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <Typography.Text type="secondary">
-            共 {itemsQuery.data?.total ?? 0} 条商品，支持按账号与关键字筛选。
+            共 {itemsQuery.data?.total ?? 0} 件商品{selectedAccountId ? '（已筛选）' : ''}。
           </Typography.Text>
           <Table<ItemRecord>
             columns={columns}
             dataSource={itemsQuery.data?.items ?? []}
             loading={itemsQuery.isLoading || itemsQuery.isFetching}
+            locale={{
+              emptyText: <Empty description="暂无商品" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+            }}
             onChange={handleTableChange}
             pagination={{
               current: itemsQuery.data?.page ?? page,
@@ -398,19 +466,13 @@ export default function ItemsPage() {
             <Input />
           </Form.Item>
           <Form.Item label="价格" name="price" rules={[{ required: true, message: '请输入商品价格' }]}>
-            <InputNumber min={0} precision={2} style={{ width: '100%' }} />
+            <InputNumber addonBefore="¥" min={0} precision={2} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item label="状态" name="status" rules={[{ required: true, message: '请选择商品状态' }]}>
-            <Select
-              options={[
-                { label: 'online', value: 'online' },
-                { label: 'offline', value: 'offline' },
-                { label: 'sold', value: 'sold' },
-              ]}
-            />
+            <Select options={STATUS_OPTIONS} />
           </Form.Item>
         </Form>
       </Modal>
-    </>
+    </Space>
   )
 }

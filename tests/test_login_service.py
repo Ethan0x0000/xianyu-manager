@@ -1,6 +1,7 @@
 import time
 import unittest
 import uuid
+from unittest.mock import AsyncMock, patch
 
 from app.services.login_service import (
     LoginService,
@@ -57,7 +58,7 @@ class TestLoginServiceSync(unittest.TestCase):
 
 
 class TestLoginServiceAsync(unittest.IsolatedAsyncioTestCase):
-    async def test_initiate_password_login_raises_for_missing_fields(self) -> None:
+    async def test_create_password_session_raises_for_missing_fields(self) -> None:
         service = LoginService()
         invalid_cases = [
             ("account-1", "", "password", "username and password are required"),
@@ -72,38 +73,46 @@ class TestLoginServiceAsync(unittest.IsolatedAsyncioTestCase):
                 password=password,
             ):
                 with self.assertRaisesRegex(LoginValidationError, message):
-                    _ = await service.initiate_password_login(
+                    _ = await service.create_password_session(
                         account_id, username, password
                     )
 
-    async def test_initiate_password_login_returns_pending_for_valid_input(
+    async def test_create_password_session_returns_processing_for_valid_input(
         self,
     ) -> None:
         service = LoginService()
 
-        result = await service.initiate_password_login(
-            account_id="account-1",
-            username="seller-user",
-            password="seller-pass",
-        )
+        with patch.object(
+            LoginService,
+            "_execute_password_login",
+            new=AsyncMock(),
+        ):
+            session = await service.create_password_session(
+                account_id="account-1",
+                username="seller-user",
+                password="seller-pass",
+            )
 
-        self.assertEqual(result, {"status": "pending", "message": "login_initiated"})
+        self.assertEqual(session.status, "processing")
+        self.assertEqual(session.message, "login_initiated")
 
     async def test_create_password_session_returns_processing_session_with_metadata(
         self,
     ) -> None:
         service = LoginService()
 
-        create_password_session = getattr(service, "create_password_session", None)
-        self.assertIsNotNone(create_password_session)
-        assert create_password_session is not None
-        session = await create_password_session(
-            account_id="account-1",
-            username="seller-user",
-            password="seller-pass",
-            refresh_mode=True,
-            show_browser=True,
-        )
+        with patch.object(
+            LoginService,
+            "_execute_password_login",
+            new=AsyncMock(),
+        ):
+            session = await service.create_password_session(
+                account_id="account-1",
+                username="seller-user",
+                password="seller-pass",
+                refresh_mode=True,
+                show_browser=True,
+            )
 
         self.assertIsInstance(uuid.UUID(session.session_id), uuid.UUID)
         self.assertEqual(session.account_id, "account-1")
@@ -117,20 +126,19 @@ class TestLoginServiceAsync(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         service = LoginService()
 
-        create_password_session = getattr(service, "create_password_session", None)
-        get_password_session = getattr(service, "get_password_session", None)
-        self.assertIsNotNone(create_password_session)
-        self.assertIsNotNone(get_password_session)
-        assert create_password_session is not None
-        assert get_password_session is not None
-        session = await create_password_session(
-            account_id="account-1",
-            username="seller-user",
-            password="seller-pass",
-        )
+        with patch.object(
+            LoginService,
+            "_execute_password_login",
+            new=AsyncMock(),
+        ):
+            session = await service.create_password_session(
+                account_id="account-1",
+                username="seller-user",
+                password="seller-pass",
+            )
 
-        self.assertIs(get_password_session(session.session_id), session)
-        self.assertIsNone(get_password_session("missing-session"))
+        self.assertIs(service.get_password_session(session.session_id), session)
+        self.assertIsNone(service.get_password_session("missing-session"))
 
 
 if __name__ == "__main__":

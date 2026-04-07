@@ -28,7 +28,7 @@ services:
       PYTHONDONTWRITEBYTECODE: ${PYTHONDONTWRITEBYTECODE:-1}
       TZ: ${TZ:-Asia/Shanghai}
       DB_PATH: ${DB_PATH:-/app/data/xianyu_data.db}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
 
       # 必填密钥：必须通过 .env 或宿主环境显式提供，避免容器在应用启动后才因缺失崩溃
       SECRET_KEY: "${SECRET_KEY:?Set SECRET_KEY in .env or your shell before running docker compose}"

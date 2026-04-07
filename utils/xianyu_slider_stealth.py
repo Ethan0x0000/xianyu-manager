@@ -9238,6 +9238,24 @@ class XianyuSliderStealth:
             dict: 获取到的cookie字典，失败返回None
         """
         page = None
+
+        def _cookies_to_dict(page_obj) -> dict:
+            """Convert DrissionPage cookies to a flat {name: value} dict."""
+            result = {}
+            try:
+                raw = page_obj.cookies()
+                if isinstance(raw, list):
+                    for c in raw:
+                        if isinstance(c, dict) and "name" in c and "value" in c:
+                            result[c["name"]] = c["value"]
+                        elif isinstance(c, tuple) and len(c) >= 2:
+                            result[c[0]] = c[1]
+                elif isinstance(raw, dict):
+                    result = dict(raw)
+            except Exception as exc:
+                logger.warning(f"【{self.pure_user_id}】获取Cookie失败: {exc}")
+            return result
+
         try:
             # 检查日期有效性
             if not self._check_date_validity():
@@ -9422,7 +9440,7 @@ class XianyuSliderStealth:
                         time.sleep(2)
                         password_tab_found = True
                         break
-                except:
+                except Exception:
                     continue
 
             if not password_tab_found:
@@ -9448,11 +9466,12 @@ class XianyuSliderStealth:
                     if login_input:
                         logger.info(f"【{self.pure_user_id}】找到登录表单: {selector}")
                         break
-                except:
+                except Exception:
                     continue
 
             if not login_input:
                 logger.error(f"【{self.pure_user_id}】未找到登录表单")
+                self.last_login_error = "未找到登录表单"
                 return None
 
             # 输入账号
@@ -9486,11 +9505,12 @@ class XianyuSliderStealth:
                             f"【{self.pure_user_id}】找到密码输入框: {selector}"
                         )
                         break
-                except:
+                except Exception:
                     continue
 
             if not password_input:
                 logger.error(f"【{self.pure_user_id}】未找到密码输入框")
+                self.last_login_error = "未找到密码输入框"
                 return None
 
             try:
@@ -9518,7 +9538,7 @@ class XianyuSliderStealth:
                         logger.info(f"【{self.pure_user_id}】用户协议已勾选")
                         time.sleep(0.5)
                         break
-                except:
+                except Exception:
                     continue
 
             # 点击登录按钮
@@ -9542,7 +9562,7 @@ class XianyuSliderStealth:
                         logger.info(f"【{self.pure_user_id}】登录按钮已点击")
                         login_button_found = True
                         break
-                except:
+                except Exception:
                     continue
 
             if not login_button_found:
@@ -9555,84 +9575,113 @@ class XianyuSliderStealth:
                 except Exception as e:
                     logger.error(f"【{self.pure_user_id}】按Enter键失败: {str(e)}")
 
-            # 等待登录完成
-            logger.info(f"【{self.pure_user_id}】等待登录完成...")
-            time.sleep(5)
+            # --- Login success verification (replaces blind sleep) ---
+            max_wait = 300 if show_browser else 30
+            poll_interval = 3
+            elapsed = 0
+            login_verified = False
+            verified_cookies = {}
 
-            # 检查当前URL和标题
-            current_url = page.url
-            logger.info(f"【{self.pure_user_id}】登录后URL: {current_url}")
-            page_title = page.title
-            logger.info(f"【{self.pure_user_id}】登录后页面标题: {page_title}")
+            logger.info(
+                f"【{self.pure_user_id}】开始轮询登录结果 (最长等待 {max_wait}秒)..."
+            )
 
-            # 根据浏览器模式决定等待时间
-            # 有头模式：等待5分钟（用户可能需要手动处理验证码等）
-            # 无头模式：等待10秒
-            if show_browser:
-                wait_seconds = 300  # 5分钟
-                logger.info(
-                    f"【{self.pure_user_id}】有头模式：等待5分钟让Cookie完全生成（期间可手动处理验证码等）..."
-                )
-            else:
-                wait_seconds = 10
-                logger.info(
-                    f"【{self.pure_user_id}】无头模式：等待10秒让Cookie完全生成..."
-                )
+            while elapsed < max_wait:
+                time.sleep(poll_interval)
+                elapsed += poll_interval
 
-            time.sleep(wait_seconds)
-            logger.info(f"【{self.pure_user_id}】等待完成，准备获取Cookie")
-
-            # 获取Cookie
-            logger.info(f"【{self.pure_user_id}】开始获取Cookie...")
-            cookies_raw = page.cookies()
-
-            # 将cookies转换为字典格式
-            cookies = {}
-            if isinstance(cookies_raw, list):
-                # 如果返回的是列表格式，转换为字典
-                for cookie in cookies_raw:
-                    if (
-                        isinstance(cookie, dict)
-                        and "name" in cookie
-                        and "value" in cookie
+                # 1. Check for error elements on page
+                try:
+                    for err_sel in (
+                        "css:.login-error-msg",
+                        "css:.errloading",
+                        "css:.error-msg",
+                        "css:.fm-field-error",
                     ):
-                        cookies[cookie["name"]] = cookie["value"]
-                    elif isinstance(cookie, tuple) and len(cookie) >= 2:
-                        cookies[cookie[0]] = cookie[1]
-            elif isinstance(cookies_raw, dict):
-                # 如果已经是字典格式，直接使用
-                cookies = cookies_raw
+                        try:
+                            err_el = page.ele(err_sel, timeout=0.3)
+                            if err_el and hasattr(err_el, "text"):
+                                err_text = (err_el.text or "").strip()
+                                if err_text and len(err_text) < 200:
+                                    logger.warning(
+                                        f"【{self.pure_user_id}】检测到登录错误: {err_text}"
+                                    )
+                                    self.last_login_error = f"登录错误: {err_text}"
+                                    return None
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
 
-            if cookies:
-                logger.info(f"【{self.pure_user_id}】成功获取 {len(cookies)} 个Cookie")
-                logger.info(
-                    f"【{self.pure_user_id}】Cookie名称列表: {list(cookies.keys())}"
+                # 2. Check URL and cookies
+                try:
+                    current_url = page.url or ""
+                    current_cookies = _cookies_to_dict(page)
+
+                    if current_cookies.get("unb"):
+                        logger.info(
+                            f"【{self.pure_user_id}】检测到unb Cookie，登录成功 "
+                            f"(URL: {current_url}, cookie数: {len(current_cookies)})"
+                        )
+                        login_verified = True
+                        verified_cookies = current_cookies
+                        break
+
+                    if self._is_logged_in_url(current_url):
+                        logger.info(
+                            f"【{self.pure_user_id}】URL已跳转到登录后页面: {current_url}，"
+                            f"继续等待Cookie生成..."
+                        )
+                except Exception as e:
+                    logger.debug(f"【{self.pure_user_id}】轮询检查异常: {e}")
+
+                if elapsed % 15 == 0:
+                    logger.info(
+                        f"【{self.pure_user_id}】仍在等待登录结果... "
+                        f"({elapsed}s/{max_wait}s)"
+                    )
+
+            if not login_verified:
+                final_cookies = _cookies_to_dict(page)
+                if final_cookies.get("unb"):
+                    logger.info(f"【{self.pure_user_id}】超时前最终检查发现unb Cookie")
+                    login_verified = True
+                    verified_cookies = final_cookies
+
+            if not login_verified:
+                self.last_login_error = (
+                    "登录超时，未检测到有效Cookie（缺少unb等关键字段）"
                 )
-
-                # 打印完整的Cookie
-                logger.info(f"【{self.pure_user_id}】完整Cookie内容:")
-                for name, value in cookies.items():
-                    # 对长cookie值进行截断显示
-                    if len(value) > 50:
-                        display_value = f"{value[:25]}...{value[-25:]}"
-                    else:
-                        display_value = value
-                    logger.info(f"【{self.pure_user_id}】  {name} = {display_value}")
-
-                # 将cookie转换为字符串格式
-                cookie_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
-                logger.info(
-                    f"【{self.pure_user_id}】Cookie字符串格式: {cookie_str[:200]}..."
-                    if len(cookie_str) > 200
-                    else f"【{self.pure_user_id}】Cookie字符串格式: {cookie_str}"
-                )
-
-                logger.info(f"【{self.pure_user_id}】登录成功，准备关闭浏览器")
-
-                return cookies
-            else:
-                logger.error(f"【{self.pure_user_id}】未获取到任何Cookie")
+                logger.warning(f"【{self.pure_user_id}】{self.last_login_error}")
                 return None
+
+            # Refresh page to trigger mtop API calls for _m_h5_tk generation
+            try:
+                logger.info(
+                    f"【{self.pure_user_id}】刷新页面以获取最新mtop令牌Cookie..."
+                )
+                page.get("https://www.goofish.com/im")
+                time.sleep(3)
+                refreshed_cookies = _cookies_to_dict(page)
+                if refreshed_cookies.get("unb"):
+                    verified_cookies = refreshed_cookies
+                    logger.info(
+                        f"【{self.pure_user_id}】页面刷新后获取到 "
+                        f"{len(verified_cookies)} 个Cookie"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"【{self.pure_user_id}】页面刷新失败（不影响登录结果）: {e}"
+                )
+
+            logger.info(
+                f"【{self.pure_user_id}】登录成功，共 {len(verified_cookies)} 个Cookie"
+            )
+            logger.info(
+                f"【{self.pure_user_id}】Cookie名称列表: {list(verified_cookies.keys())}"
+            )
+
+            return verified_cookies
 
         except Exception as e:
             logger.error(f"【{self.pure_user_id}】密码登录流程出错: {str(e)}")
@@ -9641,6 +9690,7 @@ class XianyuSliderStealth:
             logger.error(
                 f"【{self.pure_user_id}】详细错误信息: {traceback.format_exc()}"
             )
+            self.last_login_error = f"密码登录流程出错: {str(e)}"
             return None
         finally:
             # 关闭浏览器
@@ -9651,6 +9701,18 @@ class XianyuSliderStealth:
                     logger.info(f"【{self.pure_user_id}】DrissionPage浏览器已关闭")
             except Exception as e:
                 logger.warning(f"【{self.pure_user_id}】关闭浏览器时出错: {e}")
+            # 释放并发槽位
+            try:
+                concurrency_manager.unregister_instance(self.user_id)
+            except Exception:
+                pass
+            # 清理临时目录
+            try:
+                if self.temp_dir:
+                    shutil.rmtree(self.temp_dir, ignore_errors=True)
+                    self.temp_dir = None
+            except Exception:
+                pass
 
     def run(self, url: str):
         """运行主流程，返回(成功状态, cookie数据)"""

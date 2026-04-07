@@ -97,6 +97,8 @@ class PasswordLoginStatusResponse(BaseModel):
     status: str
     message: str = ""
     result_cookie: str = ""
+    cookie_valid: bool = False
+    cookie_count: int = 0
     verification_url: str = ""
     qr_code_url: str = ""
     screenshot_path: str = ""

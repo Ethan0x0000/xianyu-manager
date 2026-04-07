@@ -100,10 +100,45 @@ type PasswordLoginStatusResponse = {
   status: string
   message?: string
   result_cookie?: string
+  cookie_valid?: boolean
+  cookie_count?: number
   verification_url?: string
   qr_code_url?: string
   verification_type?: string
   verification_message?: string
+}
+
+const PASSWORD_STATUS_COLOR_MAP = {
+  processing: 'processing',
+  success: 'success',
+  failed: 'error',
+  error: 'error',
+  cancelled: 'default',
+  expired: 'warning',
+} as const
+
+const PASSWORD_STATUS_LABEL_MAP = {
+  processing: '登录中',
+  success: '登录成功',
+  failed: '登录失败',
+  error: '登录异常',
+  cancelled: '已取消',
+  expired: '已过期',
+} as const
+
+function getPasswordStatusDisplay(status?: string): keyof typeof PASSWORD_STATUS_COLOR_MAP {
+  switch (status) {
+    case 'success':
+    case 'failed':
+    case 'error':
+    case 'cancelled':
+    case 'expired':
+      return status
+    case 'processing':
+    case 'pending':
+    default:
+      return 'processing'
+  }
 }
 
 type RefreshCookieResponse = {
@@ -255,8 +290,20 @@ export default function AccountsPage() {
   const [qrPollingEnabled, setQrPollingEnabled] = useState(false)
   const [passwordSession, setPasswordSession] = useState<PasswordLoginCreateResponse | null>(null)
   const [passwordPollingEnabled, setPasswordPollingEnabled] = useState(false)
+  const [passwordElapsed, setPasswordElapsed] = useState(0)
   const handledQrSessionRef = useRef<string | null>(null)
   const handledPasswordSessionRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!passwordPollingEnabled) {
+      return
+    }
+    setPasswordElapsed(0)
+    const interval = setInterval(() => {
+      setPasswordElapsed((prev) => prev + 1)
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [passwordPollingEnabled])
 
   const [editForm] = Form.useForm<EditFormValues>()
 
@@ -307,6 +354,7 @@ export default function AccountsPage() {
     setQrPollingEnabled(false)
     setPasswordSession(null)
     setPasswordPollingEnabled(false)
+    setPasswordElapsed(0)
     handledQrSessionRef.current = null
     handledPasswordSessionRef.current = null
   }, [])
@@ -334,13 +382,14 @@ export default function AccountsPage() {
 
   const refreshCookieMutation = useMutation({
     mutationFn: async (account: ManagedAccount) => {
-      if (!account.cookie_value.trim()) {
+      const cookieValue = account.cookie_value ?? ''
+      if (!cookieValue.trim()) {
         throw new Error('当前账号没有可刷新的 Cookie')
       }
 
       const response = await apiClient.post<RefreshCookieResponse>('/qr-login/refresh-cookies', {
         cookie_id: account.account_id,
-        qr_cookies: account.cookie_value,
+        qr_cookies: cookieValue,
       })
 
       return response.data
@@ -524,8 +573,32 @@ export default function AccountsPage() {
 
     if (statusPayload.status === 'expired' && handledPasswordSessionRef.current !== `expired:${passwordSession.session_id}`) {
       handledPasswordSessionRef.current = `expired:${passwordSession.session_id}`
+      setPasswordSession((current) =>
+        current
+          ? {
+              ...current,
+              message: statusPayload.message ?? current.message ?? '密码登录会话已过期，请重新发起',
+              status: 'expired',
+            }
+          : current,
+      )
       setPasswordPollingEnabled(false)
       messageApi.error('密码登录会话已过期，请重新发起')
+      return
+    }
+
+    if (statusPayload.status === 'cancelled' && handledPasswordSessionRef.current !== `cancelled:${passwordSession.session_id}`) {
+      handledPasswordSessionRef.current = `cancelled:${passwordSession.session_id}`
+      setPasswordSession((current) =>
+        current
+          ? {
+              ...current,
+              message: statusPayload.message ?? current.message ?? '登录已取消',
+              status: 'cancelled',
+            }
+          : current,
+      )
+      setPasswordPollingEnabled(false)
       return
     }
 
@@ -534,7 +607,11 @@ export default function AccountsPage() {
       setPasswordPollingEnabled(false)
 
       void (async () => {
-        messageApi.success('密码登录成功，Cookie 已写入账号')
+        if (!statusPayload.result_cookie || statusPayload.result_cookie.trim() === '') {
+          messageApi.warning('登录状态为成功但未获得有效Cookie，请重试')
+        } else {
+          messageApi.success(statusPayload.message || '密码登录成功，Cookie 已写入账号')
+        }
         closeAddModal()
         await refreshAccounts()
       })()
@@ -542,11 +619,22 @@ export default function AccountsPage() {
       return
     }
 
-    if (
-      !['pending', 'processing', 'success'].includes(statusPayload.status) &&
-      handledPasswordSessionRef.current !== `error:${passwordSession.session_id}`
-    ) {
+    const isPasswordFailureStatus = statusPayload.status === 'failed' || statusPayload.status === 'error'
+    const isUnhandledPasswordStatus = !['pending', 'processing', 'success', 'failed', 'error', 'cancelled', 'expired'].includes(
+      statusPayload.status,
+    )
+
+    if ((isPasswordFailureStatus || isUnhandledPasswordStatus) && handledPasswordSessionRef.current !== `error:${passwordSession.session_id}`) {
       handledPasswordSessionRef.current = `error:${passwordSession.session_id}`
+      setPasswordSession((current) =>
+        current
+          ? {
+              ...current,
+              message: statusPayload.message ?? statusPayload.verification_message ?? current.message ?? '密码登录失败',
+              status: isPasswordFailureStatus ? statusPayload.status : 'error',
+            }
+          : current,
+      )
       setPasswordPollingEnabled(false)
       messageApi.error(statusPayload.message || statusPayload.verification_message || '密码登录失败')
     }
@@ -774,27 +862,85 @@ export default function AccountsPage() {
                       <Space direction="vertical" size="small" style={{ display: 'flex' }}>
                         <Tag
                           color={
-                            passwordStatusQuery.data?.status === 'success'
-                              ? 'success'
-                              : passwordStatusQuery.data?.status === 'expired'
-                                ? 'warning'
-                                : 'processing'
+                            PASSWORD_STATUS_COLOR_MAP[
+                              getPasswordStatusDisplay(
+                                passwordSession.status === 'cancelled'
+                                  ? passwordSession.status
+                                  : passwordStatusQuery.data?.status ?? passwordSession.status,
+                              )
+                            ]
                           }
                         >
-                          {passwordStatusQuery.data?.status === 'success'
-                            ? '登录成功'
-                            : passwordStatusQuery.data?.status === 'expired'
-                              ? '已过期'
-                              : '登录中'}
+                          {
+                            PASSWORD_STATUS_LABEL_MAP[
+                              getPasswordStatusDisplay(
+                                passwordSession.status === 'cancelled'
+                                  ? passwordSession.status
+                                  : passwordStatusQuery.data?.status ?? passwordSession.status,
+                              )
+                            ]
+                          }
                         </Tag>
-                        <Typography.Text>{passwordStatusQuery.data?.message || passwordSession.message || '等待登录结果…'}</Typography.Text>
+                        {passwordPollingEnabled ? (
+                          <Typography.Text type="secondary">
+                            已等待 {Math.floor(passwordElapsed / 60)}:{String(passwordElapsed % 60).padStart(2, '0')}
+                          </Typography.Text>
+                        ) : null}
+                        <Typography.Text
+                          type={
+                            ['failed', 'error'].includes(
+                              passwordSession.status === 'cancelled'
+                                ? passwordSession.status
+                                : passwordStatusQuery.data?.status ?? passwordSession.status ?? 'processing',
+                            )
+                              ? 'danger'
+                              : undefined
+                          }
+                        >
+                          {passwordSession.status === 'cancelled'
+                            ? passwordSession.message || '登录已取消'
+                            : passwordStatusQuery.data?.message ||
+                              passwordStatusQuery.data?.verification_message ||
+                              passwordSession.message ||
+                              '等待登录结果…'}
+                        </Typography.Text>
                         {passwordStatusQuery.data?.verification_message ? (
                           <Typography.Text type="secondary">{passwordStatusQuery.data.verification_message}</Typography.Text>
+                        ) : null}
+                        {passwordStatusQuery.data?.verification_type ? (
+                          <Typography.Text type="secondary">验证类型：{passwordStatusQuery.data.verification_type}</Typography.Text>
                         ) : null}
                         {passwordStatusQuery.data?.verification_url ? (
                           <Typography.Link href={passwordStatusQuery.data.verification_url} target="_blank">
                             打开验证页面
                           </Typography.Link>
+                        ) : null}
+                        {passwordPollingEnabled ? (
+                          <Button
+                            danger
+                            onClick={async () => {
+                              if (!passwordSession?.session_id) return
+                              try {
+                                await apiClient.delete(`/password-login/${passwordSession.session_id}`)
+                                setPasswordSession((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        message: '登录已取消',
+                                        status: 'cancelled',
+                                      }
+                                    : current,
+                                )
+                                setPasswordPollingEnabled(false)
+                                messageApi.info('登录已取消')
+                              } catch {
+                                messageApi.error('取消失败')
+                              }
+                            }}
+                            size="small"
+                          >
+                            取消登录
+                          </Button>
                         ) : null}
                       </Space>
                     </Card>

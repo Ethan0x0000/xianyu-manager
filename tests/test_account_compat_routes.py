@@ -154,16 +154,22 @@ class TestAccountCompatibilityRoutes(TestCase):
     def test_password_login_start_and_check_return_processing_and_success(self) -> None:
         self._insert_account(cookie_str="")
 
-        response = self.client.post(
-            "/api/password-login",
-            headers=self._auth_headers(),
-            json={
-                "account_id": "seller-1",
-                "account": "seller-user",
-                "password": "seller-pass",
-                "show_browser": True,
-            },
-        )
+        # Mock the background browser automation so the test controls session state
+        with patch.object(
+            LoginService,
+            "_execute_password_login",
+            new=AsyncMock(),
+        ):
+            response = self.client.post(
+                "/api/password-login",
+                headers=self._auth_headers(),
+                json={
+                    "account_id": "seller-1",
+                    "account": "seller-user",
+                    "password": "seller-pass",
+                    "show_browser": True,
+                },
+            )
 
         self.assertEqual(200, response.status_code)
         payload = response.json()
