@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import Scope
+from typing_extensions import override
 
 from app.api.routers import register_routers
 from app.bootstrap.runtime import RuntimeSupervisor
@@ -37,6 +38,7 @@ class SPAStaticFiles(StaticFiles):
     ``index.html`` so that the React SPA router can handle the URL.
     """
 
+    @override
     async def get_response(self, path: str, scope: Scope) -> Response:
         try:
             return await super().get_response(path, scope)
@@ -50,6 +52,18 @@ def _resolve_project_path(path_value: str) -> Path:
     if path.is_absolute():
         return path
     return PROJECT_ROOT / path
+
+
+def _resolve_frontend_dir(settings: Settings) -> Path:
+    frontend_dir = _resolve_project_path(settings.frontend_dist_dir)
+    if (frontend_dir / "index.html").exists():
+        return frontend_dir
+
+    bundled_frontend_dir = _resolve_project_path(settings.frontend_bundled_dist_dir)
+    if (bundled_frontend_dir / "index.html").exists():
+        return bundled_frontend_dir
+
+    return frontend_dir
 
 
 def _prepare_database_path(db_path: str) -> None:
@@ -120,7 +134,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
 
-    frontend_dir = _resolve_project_path(settings.frontend_dist_dir)
+    frontend_dir = _resolve_frontend_dir(settings)
     upload_dir = _resolve_project_path(settings.uploads_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
     (upload_dir / "images").mkdir(parents=True, exist_ok=True)

@@ -99,6 +99,9 @@ COPY . .
 # 构建前端（React SPA）
 RUN cd /app/frontend && npm ci --prefer-offline && npm run build
 
+# 保留一份不受 /app 代码挂载影响的前端构建产物
+RUN mkdir -p /opt/xianyu-manager && cp -r /app/frontend/dist /opt/xianyu-manager/frontend-dist
+
 # 安装Playwright浏览器（必须在复制项目文件之后）
 RUN playwright install chromium && \
     playwright install-deps chromium

@@ -114,6 +114,9 @@ class SettingsDefaultsTests(unittest.TestCase):
         self.assertEqual("::", settings.api_host)
         self.assertEqual(8848, settings.api_port)
         self.assertEqual("data/xianyu_data.db", settings.db_path)
+        self.assertEqual(
+            "/opt/xianyu-manager/frontend-dist", settings.frontend_bundled_dist_dir
+        )
         self.assertEqual("admin", settings.admin_username)
         self.assertTrue(settings.admin_password_hash)
         self.assertEqual("", settings.secret_key)

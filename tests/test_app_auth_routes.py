@@ -1,4 +1,7 @@
+import os
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -25,6 +28,30 @@ class AppAuthRouteTests(unittest.TestCase):
         # The SPA mount serves index.html for unknown paths (200)
         # or falls through to 404 when index.html hasn't been built yet.
         self.assertIn(response.status_code, (200, 404))
+
+    def test_root_uses_bundled_frontend_when_runtime_dist_is_missing(self) -> None:
+        with TemporaryDirectory() as temp_dir, patch.dict(os.environ, {}, clear=True):
+            temp_path = Path(temp_dir)
+            missing_dist = temp_path / "missing-dist"
+            bundled_dist = temp_path / "bundled-dist"
+            bundled_dist.mkdir(parents=True, exist_ok=True)
+            _ = (bundled_dist / "index.html").write_text(
+                "<html><body>bundled frontend</body></html>",
+                encoding="utf-8",
+            )
+
+            app = create_app(
+                settings=make_settings(
+                    frontend_dist_dir=str(missing_dist),
+                    frontend_bundled_dist_dir=str(bundled_dist),
+                )
+            )
+            client = TestClient(app)
+
+            response = client.get("/", follow_redirects=False)
+
+        self.assertEqual(200, response.status_code)
+        self.assertIn("bundled frontend", response.text)
 
     def test_login_info_status_enabled_for_default_admin_credentials(self) -> None:
         client = self._make_client()

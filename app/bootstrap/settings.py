@@ -52,6 +52,7 @@ class Settings:
 
     # Frontend build output and upload paths
     frontend_dist_dir: str = "frontend/dist"
+    frontend_bundled_dist_dir: str = "/opt/xianyu-manager/frontend-dist"
     uploads_dir: str = "data/uploads"
 
     # Admin bootstrap defaults for first-time login; operators should override them.
@@ -114,6 +115,9 @@ def load_settings(config_path: str = CONFIG_FILE) -> Settings:
         api_port=int(os.environ.get("API_PORT") or str(api_config.get("port", 8848))),
         db_path=os.environ.get("DB_PATH", "data/xianyu_data.db"),
         frontend_dist_dir=os.environ.get("FRONTEND_DIST_DIR", "frontend/dist"),
+        frontend_bundled_dist_dir=os.environ.get(
+            "FRONTEND_BUNDLED_DIST_DIR", "/opt/xianyu-manager/frontend-dist"
+        ),
         uploads_dir=os.environ.get("UPLOADS_DIR", "data/uploads"),
         admin_username=os.environ.get("ADMIN_USERNAME", DEFAULT_ADMIN_USERNAME),
         admin_password_hash=os.environ.get(
