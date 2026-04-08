@@ -9112,12 +9112,77 @@ class XianyuSliderStealth:
                         )
                         time.sleep(2)
 
+                    # 【补丁】二次导航触发 Havana SSO 令牌交换
+                    # 密码登录通过 passport iframe 完成，havana_lgc2_77 可能需要主站导航来触发设置
+                    try:
+                        target_page_nav = active_page or page
+                        # 先检查当前是否已有 havana_lgc2_77
+                        has_havana = False
+                        try:
+                            for c in context.cookies():
+                                if c.get("name") == "havana_lgc2_77":
+                                    has_havana = True
+                                    break
+                        except Exception:
+                            pass
+
+                        if not has_havana:
+                            logger.info(
+                                f"【{self.pure_user_id}】havana_lgc2_77 尚未获取，尝试导航主站触发SSO令牌交换..."
+                            )
+                            try:
+                                target_page_nav.goto(
+                                    "https://www.goofish.com",
+                                    wait_until="domcontentloaded",
+                                    timeout=15000,
+                                )
+                                time.sleep(3)
+                            except Exception as nav_e:
+                                logger.warning(
+                                    f"【{self.pure_user_id}】主站导航异常（继续获取Cookie）: {nav_e}"
+                                )
+                                time.sleep(1)
+                            # 再检查一次
+                            has_havana_after = False
+                            try:
+                                for c in context.cookies():
+                                    if c.get("name") == "havana_lgc2_77":
+                                        has_havana_after = True
+                                        break
+                            except Exception:
+                                pass
+                            if has_havana_after:
+                                logger.info(
+                                    f"【{self.pure_user_id}】✅ 二次导航后成功获取 havana_lgc2_77"
+                                )
+                            else:
+                                logger.warning(
+                                    f"【{self.pure_user_id}】⚠️ 二次导航后仍未获取 havana_lgc2_77，继续获取其他Cookie"
+                                )
+                        else:
+                            logger.info(
+                                f"【{self.pure_user_id}】✅ havana_lgc2_77 已存在，跳过二次导航"
+                            )
+                    except Exception as havana_e:
+                        logger.warning(
+                            f"【{self.pure_user_id}】Havana令牌获取尝试异常: {havana_e}"
+                        )
+
                     # 获取Cookie
                     logger.info(f"【{self.pure_user_id}】获取最新Cookie...")
                     time.sleep(1)
                     cookies_dict = {}
                     try:
-                        cookies_list = context.cookies()
+                        cookies_list = context.cookies(
+                            [
+                                "https://www.goofish.com",
+                                "https://goofish.com",
+                                "https://passport.goofish.com",
+                                "https://h5api.m.goofish.com",
+                                "https://login.taobao.com",
+                                "https://g.alicdn.com",
+                            ]
+                        )
                         for cookie in cookies_list:
                             cookies_dict[cookie.get("name", "")] = cookie.get(
                                 "value", ""
@@ -9136,6 +9201,7 @@ class XianyuSliderStealth:
                             "t",
                             "sgcookie",
                             "cna",
+                            "havana_lgc2_77",
                         ]
                         logger.info(f"【{self.pure_user_id}】关键Cookie字段检查:")
                         for key in important_keys:

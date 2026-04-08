@@ -7415,40 +7415,58 @@ class XianyuLive:
                 await self.update_config_cookies()
                 logger.info(f"【{self.cookie_id}】数据库cookies更新成功")
 
-                (
-                    preflighted_cookies_str,
-                    preflighted_cookies_dict,
-                ) = await self._preflight_cookie_refresh_handoff(self.cookies_str)
-                if preflighted_cookies_str != self.cookies_str:
-                    self.cookies_str = preflighted_cookies_str
-                    self.cookies = preflighted_cookies_dict
-                    await self.update_config_cookies()
-                    logger.info(
-                        f"【{self.cookie_id}】交接预检返回了更新后的Cookie，已同步写回数据库"
+                # 尝试预检，但预检失败不再回滚到更旧的Cookie
+                preflight_success = False
+                try:
+                    (
+                        preflighted_cookies_str,
+                        preflighted_cookies_dict,
+                    ) = await self._preflight_cookie_refresh_handoff(self.cookies_str)
+                    if preflighted_cookies_str != self.cookies_str:
+                        self.cookies_str = preflighted_cookies_str
+                        self.cookies = preflighted_cookies_dict
+                        await self.update_config_cookies()
+                        logger.info(
+                            f"【{self.cookie_id}】交接预检返回了更新后的Cookie，已同步写回数据库"
+                        )
+                    else:
+                        self.cookies = preflighted_cookies_dict
+                    logger.info(f"【{self.cookie_id}】自动Cookie刷新交接预检成功")
+                    preflight_success = True
+                except Exception as preflight_e:
+                    # 【补丁】预检失败时，不回滚到更旧的Cookie
+                    # 旧Cookie已经过期（否则不会触发刷新），回滚只会让情况更糟
+                    # 新Cookie来自成功的浏览器密码登录，保留它们让下次重试有更好的基础
+                    logger.warning(
+                        f"【{self.cookie_id}】交接预检失败: {self._safe_str(preflight_e)}，但新Cookie来自成功的密码登录，保留新Cookie不回滚（旧Cookie更过期）"
                     )
-                else:
-                    self.cookies = preflighted_cookies_dict
-                logger.info(f"【{self.cookie_id}】自动Cookie刷新交接预检成功")
+                    # 清理熔断状态，允许新实例尝试
+                    self.clear_init_auth_failure_state(self.cookie_id)
+                    self.last_init_failure_reason = None
+                    self.last_init_failure_type = None
+                    self.init_auth_failures = 0
 
-                # ⚠️ 在重启前完成所有需要的操作（如发送通知）
-                # 因为重启触发后2秒内任务会被取消，不能再执行任何async操作
-                logger.info(f"【{self.cookie_id}】cookies更新成功，准备重启任务...")
+                # 无论预检是否成功，都尝试重启（新Cookie至少不比旧的差）
+                logger.info(
+                    f"【{self.cookie_id}】cookies更新{'并预检'}成功，准备重启任务..."
+                    if preflight_success
+                    else f"【{self.cookie_id}】cookies已更新（预检未通过但保留新Cookie），准备重启任务..."
+                )
 
                 # 通过CookieManager重启任务
                 logger.info(f"【{self.cookie_id}】通过CookieManager触发重启...")
+                self.connection_restart_flag = True
                 await self._restart_instance()
 
-                # ⚠️ _restart_instance() 已触发重启，当前任务即将被取消
-                # 立即返回，不执行任何后续代码（包括发送通知）
                 logger.info(f"【{self.cookie_id}】重启请求已触发，等待任务被取消...")
                 return True
 
             except Exception as update_e:
                 logger.error(
-                    f"【{self.cookie_id}】更新cookies过程中出错，尝试回滚: {self._safe_str(update_e)}"
+                    f"【{self.cookie_id}】更新cookies过程中出错: {self._safe_str(update_e)}"
                 )
-
-                # 回滚cookies
+                # 仅在数据库写入等基础操作失败时才回滚
+                # 不因预检失败而回滚（预检失败已在上面的 except 中处理）
                 try:
                     self.cookies_str = old_cookies_str
                     self.cookies = old_cookies_dict
